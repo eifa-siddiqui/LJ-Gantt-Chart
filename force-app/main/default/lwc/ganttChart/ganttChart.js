@@ -81,7 +81,7 @@ export default class DynamicGantt extends LightningElement {
     sourceLevel1Data = [];
     @track changeHistory = [];
     @track isSavingChange = false;
-    @track dragConfirmation = null;
+    @track dragConfirm = { visible: false };
     suppressBarClick = false;
     dragState = null;
     isEditMode = false;
@@ -863,20 +863,58 @@ export default class DynamicGantt extends LightningElement {
             return;
         }
 
-        this.dragConfirmation = this._buildDragConfirmation(drag);
+        this._openDragConfirm(drag);
     }
 
-    confirmDragChange() {
-        if (!this.dragConfirmation?.drag) {
+    _openDragConfirm(drag) {
+        const item = this._findItem(drag.id, drag.level);
+        if (!item) {
+            this._refreshBarsForCurrentScale();
             return;
         }
-        const drag = this.dragConfirmation.drag;
-        this.dragConfirmation = null;
+
+        const shiftedDates = this._buildShiftedDatesForItem(item.record, drag.level, drag.movedDays);
+        const before = this._buildFieldValueMapFromDates(drag.level, drag.originalDates);
+        const after = this._buildFieldValueMapFromDates(drag.level, shiftedDates);
+
+        this.dragConfirm = {
+            visible: true,
+            id: drag.id,
+            level: drag.level,
+            objectApi: drag.objectApi,
+            movedDays: drag.movedDays,
+            itemLabel: item.record?.Name || 'Record',
+            before,
+            after,
+            changes: [
+                {
+                    key: 'start',
+                    label: 'Start',
+                    before: this._formatDate(drag.originalDates.actualStart),
+                    after: this._formatDate(shiftedDates.actualStart)
+                },
+                {
+                    key: 'end',
+                    label: 'End',
+                    before: this._formatDate(drag.originalDates.actualEnd),
+                    after: this._formatDate(shiftedDates.actualEnd)
+                }
+            ]
+        };
+    }
+
+    confirmDragShift() {
+        if (!this.dragConfirm?.visible) {
+            return;
+        }
+
+        const drag = { ...this.dragConfirm };
+        this.dragConfirm = { visible: false };
         this._commitDragShift(drag);
     }
 
-    cancelDragChange() {
-        this.dragConfirmation = null;
+    cancelDragConfirm() {
+        this.dragConfirm = { visible: false };
         this._refreshBarsForCurrentScale();
     }
 
@@ -1353,7 +1391,7 @@ export default class DynamicGantt extends LightningElement {
             const total = timelineEnd - timelineStart;
             if (total <= 0) return 'display:none;';
 
-            const offsetPct = ((targetEnd.getTime() + DAY_MS - timelineStart) / total) * 100;
+            const offsetPct = (((targetEnd.getTime() + DAY_MS) - timelineStart) / total) * 100;
             return `left:${Math.max(0, Math.min(100, offsetPct)).toFixed(2)}%; display:block;`;
         } catch {
             return 'display:none;';
@@ -1463,40 +1501,6 @@ export default class DynamicGantt extends LightningElement {
                 children: (l2.children || []).map((l3) => updater(l3))
             }))
         }));
-    }
-
-    _buildDragConfirmation(drag) {
-        const item = this._findItem(drag.id, drag.level);
-        if (!item) {
-            return null;
-        }
-
-        const nextDates = this._buildShiftedDatesForItem(item.record, drag.level, drag.movedDays);
-        const changes = [];
-        const addChange = (key, label, previousValue, nextValue) => {
-            if (!previousValue && !nextValue) {
-                return;
-            }
-            changes.push({
-                key,
-                label,
-                before: this._formatDate(previousValue),
-                after: this._formatDate(nextValue)
-            });
-        };
-
-        addChange('plannedStart', 'Planned Start', drag.originalDates.plannedStart, nextDates.plannedStart);
-        addChange('plannedEnd', 'Planned End', drag.originalDates.plannedEnd, nextDates.plannedEnd);
-        addChange('actualStart', 'Actual Start', drag.originalDates.actualStart, nextDates.actualStart);
-        addChange('actualEnd', 'Actual End', drag.originalDates.actualEnd, nextDates.actualEnd);
-        addChange('targetEnd', 'Target End', drag.originalDates.targetEnd, nextDates.targetEnd);
-
-        return {
-            drag,
-            itemName: item.record?.Name || 'Record',
-            shiftLabel: `${drag.movedDays > 0 ? '+' : ''}${drag.movedDays} day${Math.abs(drag.movedDays) === 1 ? '' : 's'}`,
-            changes
-        };
     }
 
     _commitDragShift(drag) {

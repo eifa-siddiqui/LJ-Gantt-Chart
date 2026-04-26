@@ -370,20 +370,27 @@
 }
 
 .gantt-table-body::-webkit-scrollbar,
-.gantt-timeline-container::-webkit-scrollbar {
+.gantt-timeline-container::-webkit-scrollbar,
+.timeline-body-viewport::-webkit-scrollbar {
     width: 6px;
     height: 8px;
 }
 
 .gantt-table-body::-webkit-scrollbar-track,
-.gantt-timeline-container::-webkit-scrollbar-track {
+.gantt-timeline-container::-webkit-scrollbar-track,
+.timeline-body-viewport::-webkit-scrollbar-track {
     background: #f4f6f9;
 }
 
 .gantt-table-body::-webkit-scrollbar-thumb,
-.gantt-timeline-container::-webkit-scrollbar-thumb {
+.gantt-timeline-container::-webkit-scrollbar-thumb,
+.timeline-body-viewport::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 999px;
+}
+
+.timeline-body-viewport {
+    scrollbar-width: thin;
 }
 
 .l1-item,
@@ -726,8 +733,8 @@
 .target-end-pin {
     position: absolute;
     top: 50%;
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     border: 2px solid #1f8f63;
     border-radius: 2px;
     background: #e9f8f0;
@@ -814,11 +821,11 @@
 }
 
 .gantt-bar-fill.progress-done {
-    background: linear-gradient(180deg, #66bb6a 0%, #43a047 100%);
+    background: linear-gradient(180deg, #66bb6a 0%, #1B5E20 100%);
 }
 
 .gantt-bar-fill.status-complete {
-    background: #2f855a;
+    background: #1B5E20;
 }
 
 .gantt-bar-fill.status-risk {

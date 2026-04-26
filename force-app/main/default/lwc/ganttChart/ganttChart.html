@@ -192,25 +192,27 @@
 
                     <div class="timeline-body-viewport" onscroll={syncScroll}>
                         <div class="timeline-body-scroll">
-                            <div class="today-line">
+                            <div class="today-line" style={todayLineStyle}>
                                 <span class="today-line-label">{todayLabel}</span>
                             </div>
                             <div class="project-end-line"></div>
 
                             <template for:each={level1Data} for:item="l1">
                                 <div key={l1.record.Id} class="timeline-row-parent">
-                                    <div class="gantt-bar-plan" data-element="planned-bar"></div>
-                                    <div class={l1.barClass} data-element="actual-bar" onmousedown={handleBarDragStart} onclick={handleLevel1Click} onmouseenter={handleBarHover} onmousemove={handleBarMove} onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
+                                    <div class="gantt-bar-plan" style={l1.plannedBarStyle} data-element="planned-bar"></div>
+                                    <div class={l1.barClass} style={l1.barStyle} data-element="actual-bar" onmousedown={handleBarDragStart} onclick={handleLevel1Click} onmouseenter={handleBarHover} onmousemove={handleBarMove} onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
                                         <div class={l1.fillClass} data-element="progress-fill">
                                             <span class="progress-label">{l1.progressLabel}</span>
                                         </div>
                                     </div>
                                     <div
                                         class="target-end-pin"
-                                        data-element="target-pin"
+                                        style={l1.targetEndStyle}
                                         onmouseenter={handleTargetHover}
+                                        onmouseover={handleTargetHover}
                                         onmousemove={handleTargetMove}
                                         onmouseleave={hideTooltip}
+                                        onmouseout={hideTooltip}
                                         data-id={l1.record.Id}
                                         data-level="1">
                                     </div>
@@ -219,10 +221,10 @@
                                 <template if:true={l1.expanded}>
                                     <template for:each={l1.children} for:item="l2">
                                         <div key={l2.record.Id} class="timeline-row-child">
-                                            <div class="gantt-bar-plan" data-element="planned-bar"></div>
+                                            <div class="gantt-bar-plan" style={l2.plannedBarStyle} data-element="planned-bar"></div>
                                             <div
                                                 class={l2.barClass}
-                                                data-element="actual-bar"
+                                                style={l2.barStyle}
                                                 onmousedown={handleBarDragStart}
                                                 onclick={handleItemClick}
                                                 onmouseenter={handleBarHover}
@@ -236,10 +238,12 @@
                                             </div>
                                             <div
                                                 class="target-end-pin"
-                                                data-element="target-pin"
+                                                style={l2.targetEndStyle}
                                                 onmouseenter={handleTargetHover}
+                                                onmouseover={handleTargetHover}
                                                 onmousemove={handleTargetMove}
                                                 onmouseleave={hideTooltip}
+                                                onmouseout={hideTooltip}
                                                 data-id={l2.record.Id}
                                                 data-level="2">
                                             </div>
@@ -248,10 +252,10 @@
                                         <template if:true={l2.expanded}>
                                             <template for:each={l2.children} for:item="l3">
                                                 <div key={l3.record.Id} class="timeline-row-l3">
-                                                    <div class="gantt-bar-plan" data-element="planned-bar"></div>
+                                                    <div class="gantt-bar-plan" style={l3.plannedBarStyle} data-element="planned-bar"></div>
                                                     <div
                                                         class={l3.barClass}
-                                                        data-element="actual-bar"
+                                                        style={l3.barStyle}
                                                         onmousedown={handleBarDragStart}
                                                         onclick={handleItemClick}
                                                         onmouseenter={handleBarHover}
@@ -265,10 +269,12 @@
                                                     </div>
                                                     <div
                                                         class="target-end-pin"
-                                                        data-element="target-pin"
+                                                        style={l3.targetEndStyle}
                                                         onmouseenter={handleTargetHover}
+                                                        onmouseover={handleTargetHover}
                                                         onmousemove={handleTargetMove}
                                                         onmouseleave={hideTooltip}
+                                                        onmouseout={hideTooltip}
                                                         data-id={l3.record.Id}
                                                         data-level="3">
                                                     </div>
@@ -296,22 +302,24 @@
             </div>
         </template>
 
-        <template if:true={dragConfirmation}>
-            <div class="modal-backdrop" onclick={cancelDragChange}>
+        <template if:true={dragConfirm.visible}>
+            <div class="modal-backdrop" onclick={cancelDragConfirm}>
                 <div class="modal-box" onclick={stopPropagation}>
                     <div class="modal-header">
                         <div class="modal-title-wrap">
-                            <span class="modal-title">Confirm Timeline Update</span>
-                            <span class="modal-subtitle">{dragConfirmation.itemName} will move by {dragConfirmation.shiftLabel}</span>
+                            <span class="modal-title">Confirm Schedule Change</span>
+                            <span class="modal-subtitle">{dragConfirm.itemLabel}</span>
                         </div>
-                        <button class="modal-close-btn" onclick={cancelDragChange} title="Cancel">&times;</button>
+                        <div class="modal-header-actions">
+                            <button class="modal-close-btn" onclick={cancelDragConfirm} title="Close">&times;</button>
+                        </div>
                     </div>
                     <div class="modal-body">
                         <div class="confirm-grid">
                             <div class="confirm-grid-head">Field</div>
                             <div class="confirm-grid-head">Before</div>
                             <div class="confirm-grid-head">After</div>
-                            <template for:each={dragConfirmation.changes} for:item="change">
+                            <template for:each={dragConfirm.changes} for:item="change">
                                 <div key={change.key} class="confirm-grid-row">
                                     <div class="confirm-grid-label">{change.label}</div>
                                     <div class="confirm-grid-value">{change.before}</div>
@@ -319,11 +327,13 @@
                                 </div>
                             </template>
                         </div>
-                        <div class="confirm-note">Review the date change before saving. Cancel to revert the preview.</div>
+                        <div class="confirm-note">
+                            Move this item by {dragConfirm.movedDays} day(s)?
+                        </div>
                     </div>
                     <div class="modal-actions">
-                        <button class="btn-action" onclick={cancelDragChange}>Cancel</button>
-                        <button class="btn-action btn-primary" onclick={confirmDragChange}>Save Changes</button>
+                        <button class="btn-action" onclick={cancelDragConfirm}>Cancel</button>
+                        <button class="btn-action btn-primary" onclick={confirmDragShift}>Confirm</button>
                     </div>
                 </div>
             </div>
