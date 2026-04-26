@@ -1,0 +1,27 @@
+{
+  "orgName": "Test Demo company",
+  "edition": "Developer",
+  "features": [
+    "PersonAccounts",
+    "ContactsToMultipleAccounts",
+    "Communities",
+        "Sites",
+        "RecordTypes",
+        "ContactsToMultipleAccounts",
+        "PersonAccounts",
+        "IndustriesActionPlan",
+        "FinancialServicesUser:10",
+        "FinancialServicesCommunityUser:10",
+        "DocumentChecklist",
+        "DefaultWorkflowUser"
+  ],
+  "namespace": "CJA_Mortgage3",
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    }
+  }
+}
