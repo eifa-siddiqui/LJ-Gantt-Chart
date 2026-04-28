@@ -9,6 +9,16 @@ const TIMELINE_CELL_WIDTH_PX = 130;
 const DAY_MS = 1000 * 60 * 60 * 24;
 const TOOLTIP_WIDTH_PX = 220;
 const TOOLTIP_HEIGHT_PX = 150;
+const SIDEBAR_FRAME_PX = 34;
+const COLUMN_GAP_PX = 10;
+const DEFAULT_SIDEBAR_WIDTH = 428;
+const DEFAULT_DURATION_COL_WIDTH = 78;
+const DEFAULT_OWNER_COL_WIDTH = 76;
+const MIN_NAME_COL_WIDTH = 160;
+const MIN_DURATION_COL_WIDTH = 64;
+const MAX_DURATION_COL_WIDTH = 120;
+const MIN_SIDEBAR_WIDTH = SIDEBAR_FRAME_PX + MIN_NAME_COL_WIDTH + DEFAULT_DURATION_COL_WIDTH + DEFAULT_OWNER_COL_WIDTH + (COLUMN_GAP_PX * 2);
+const MAX_SIDEBAR_WIDTH = 620;
 
 export default class DynamicGantt extends LightningElement {
     @api hierarchyLevel;
@@ -28,7 +38,10 @@ export default class DynamicGantt extends LightningElement {
     @api level1ActualEndDate;
     @api level1TargetEndDate;
     @api level1Progress;
-    @api level1PopupFields;
+    @api level1Section1Name;
+    @api level1Section1Fields;
+    @api level1Section2Name;
+    @api level1Section2Fields;
 
     @api level2Object;
     @api level2ParentLookup;
@@ -41,7 +54,10 @@ export default class DynamicGantt extends LightningElement {
     @api level2ActualEndDate;
     @api level2TargetEndDate;
     @api level2Progress;
-    @api level2PopupFields;
+    @api level2Section1Name;
+    @api level2Section1Fields;
+    @api level2Section2Name;
+    @api level2Section2Fields;
 
     @api level3Object;
     @api level3ParentLookup;
@@ -53,7 +69,10 @@ export default class DynamicGantt extends LightningElement {
     @api level3ActualEndDate;
     @api level3TargetEndDate;
     @api level3Progress;
-    @api level3PopupFields;
+    @api level3Section1Name;
+    @api level3Section1Fields;
+    @api level3Section2Name;
+    @api level3Section2Fields;
 
     @track level1Data = [];
     @track timelineMonths = [];
@@ -61,7 +80,8 @@ export default class DynamicGantt extends LightningElement {
     @track selectedRecordId;
     @track selectedObjectApi;
     @track selectedLevel;
-    @track popupFields = [];
+    @track section1 = { name: '', fields: [] };
+    @track section2 = { name: '', fields: [] };
     @track isLoading = false;
     @track errorMessage = '';
     @track ownerChoices = [];
@@ -82,11 +102,16 @@ export default class DynamicGantt extends LightningElement {
     @track changeHistory = [];
     @track isSavingChange = false;
     @track dragConfirm = { visible: false };
+    @track dragTooltip = { visible: false, label: '', dateStr: '', style: '' };
     suppressBarClick = false;
     dragState = null;
+    sidebarResizeState = null;
     isEditMode = false;
     inlineEditBaseline = null;
     inlineEditPendingValues = null;
+    durationColWidth = DEFAULT_DURATION_COL_WIDTH;
+    ownerColWidth = DEFAULT_OWNER_COL_WIDTH;
+    sidebarWidthValue = DEFAULT_SIDEBAR_WIDTH;
 
     get allObjectsButtonLabel() {
         return this.allObjectsLabel || 'All Projects';
@@ -132,6 +157,10 @@ export default class DynamicGantt extends LightningElement {
         return `gantt-wrapper scale-${this.timelineScale}${fullscreenClass}`;
     }
 
+    get wrapperStyle() {
+        return `--name-col-width:${this.nameColWidth}px; --duration-col-width:${this.durationColWidth}px; --owner-col-width:${this.ownerColWidth}px; --sidebar-width:${this.sidebarWidthPx}px;`;
+    }
+
     get displayTitle() {
         return (this.chartTitle || '').trim() || this.level1Object || 'Gantt Chart';
     }
@@ -148,8 +177,12 @@ export default class DynamicGantt extends LightningElement {
         return `${this.matchCount} match${this.matchCount === 1 ? '' : 'es'}`;
     }
 
-    get hasPopupFields() {
-        return Array.isArray(this.popupFields) && this.popupFields.length > 0;
+    get hasSection1() {
+        return this.section1 && Array.isArray(this.section1.fields) && this.section1.fields.length > 0;
+    }
+
+    get hasSection2() {
+        return this.section2 && Array.isArray(this.section2.fields) && this.section2.fields.length > 0;
     }
 
     get selectedRecordSummary() {
@@ -163,7 +196,14 @@ export default class DynamicGantt extends LightningElement {
         const record = item.record || {};
         return [
             { key: 'name', label: 'Name', value: record.Name || 'N/A' },
-            { key: 'owner', label: 'Owner', value: item.ownerName || record.Owner?.Name || 'N/A' },
+            { 
+                key: 'owner', 
+                label: 'Owner', 
+                value: item.ownerName || record.Owner?.Name || 'N/A',
+                isOwner: true,
+                ownerInitials: item.ownerInitials,
+                ownerColor: `background-color: ${item.ownerColor}; color: #ffffff;`
+            },
             { key: 'status', label: 'Status', value: this._getStatusValue(record, this._getStatusField(this.selectedLevel)) || 'N/A' },
             { key: 'start', label: 'Start', value: this._formatDate(this._getItemStartDate(item, this.selectedLevel)) },
             { key: 'end', label: 'End', value: this._formatDate(this._getItemEndDate(item, this.selectedLevel)) },
@@ -173,6 +213,10 @@ export default class DynamicGantt extends LightningElement {
 
     get tooltipVisible() {
         return this.tooltip.visible;
+    }
+
+    get tooltipDragVisible() {
+        return this.dragTooltip?.visible === true;
     }
 
     get tooltipTitle() {
@@ -209,7 +253,10 @@ export default class DynamicGantt extends LightningElement {
 
     get editFieldList() {
         const level = this.selectedLevel || 1;
-        const configuredFields = this.hasPopupFields ? this.popupFields : [];
+        const configuredFields = [
+            ...(this.hasSection1 ? this.section1.fields : []),
+            ...(this.hasSection2 ? this.section2.fields : [])
+        ];
         const combined = [
             'Name',
             'OwnerId',
@@ -249,12 +296,11 @@ export default class DynamicGantt extends LightningElement {
     }
 
     get fullscreenLabel() {
-        return this.isFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
+        return this.isFullscreen ? 'Exit Full Screen' : 'Full Screen';
     }
-
-    get fullscreenButtonSymbol() {
-        return this.isFullscreen ? '[-]' : '[+]';
-    }
+   get fullscreenIcon() {
+    return this.isFullscreen ? 'utility:contract_alt' : 'utility:fullscreen';
+}
 
     get statusOptions() {
         return [{ label: 'All Statuses', value: 'all' }, ...this.statusChoices];
@@ -284,6 +330,17 @@ export default class DynamicGantt extends LightningElement {
         if (this.timelineScale === 'weeks') return 112;
         if (this.timelineScale === 'days') return 84;
         return TIMELINE_CELL_WIDTH_PX;
+    }
+
+    get sidebarWidthPx() {
+        return this.sidebarWidthValue;
+    }
+
+    get nameColWidth() {
+        return Math.max(
+            MIN_NAME_COL_WIDTH,
+            this.sidebarWidthPx - SIDEBAR_FRAME_PX - this.durationColWidth - this.ownerColWidth - (COLUMN_GAP_PX * 2)
+        );
     }
 
     get timelineBodyStyle() {
@@ -322,10 +379,14 @@ export default class DynamicGantt extends LightningElement {
         this._keydownHandler = this.handleDocumentKeyDown.bind(this);
         this._dragMoveHandler = this.handleBarDragMove.bind(this);
         this._dragEndHandler = this.handleBarDragEnd.bind(this);
+        this._sidebarResizeMoveHandler = this.handleSidebarResizeMove.bind(this);
+        this._sidebarResizeEndHandler = this.handleSidebarResizeEnd.bind(this);
         document.addEventListener('fullscreenchange', this._fullscreenHandler);
         document.addEventListener('keydown', this._keydownHandler);
         document.addEventListener('mousemove', this._dragMoveHandler);
         document.addEventListener('mouseup', this._dragEndHandler);
+        document.addEventListener('mousemove', this._sidebarResizeMoveHandler);
+        document.addEventListener('mouseup', this._sidebarResizeEndHandler);
         window.addEventListener('resize', this._resizeHandler);
 
         this.isCurrentRecordScope = !!this.recordId;
@@ -349,6 +410,12 @@ export default class DynamicGantt extends LightningElement {
         if (this._dragEndHandler) {
             document.removeEventListener('mouseup', this._dragEndHandler);
         }
+        if (this._sidebarResizeMoveHandler) {
+            document.removeEventListener('mousemove', this._sidebarResizeMoveHandler);
+        }
+        if (this._sidebarResizeEndHandler) {
+            document.removeEventListener('mouseup', this._sidebarResizeEndHandler);
+        }
         if (this._resizeHandler) {
             window.removeEventListener('resize', this._resizeHandler);
         }
@@ -363,6 +430,56 @@ export default class DynamicGantt extends LightningElement {
 
     handleWindowResize() {
         this.initTimeline();
+    }
+
+    handleSidebarResizeStart(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.sidebarResizeState = {
+            startX: event.clientX,
+            sidebarWidth: this.sidebarWidthPx
+        };
+    }
+
+    handleSidebarResizeMove(event) {
+        if (!this.sidebarResizeState) {
+            return;
+        }
+        const delta = event.clientX - this.sidebarResizeState.startX;
+        this.sidebarWidthValue = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, this.sidebarResizeState.sidebarWidth + delta));
+    }
+
+    handleSidebarResizeEnd() {
+        if (!this.sidebarResizeState) {
+            return;
+        }
+        this.sidebarResizeState = null;
+    }
+
+    _getOwnerInitials(ownerName) {
+        if (!ownerName) return '?';
+        const names = ownerName.trim().split(/\s+/);
+        if (names.length === 1) {
+            return names[0].substring(0, 2).toUpperCase();
+        }
+        const first = names[0].charAt(0).toUpperCase();
+        const last = names[names.length - 1].charAt(0).toUpperCase();
+        return (first + last).substring(0, 2);
+    }
+
+    _getOwnerColor(ownerId) {
+        if (!ownerId) return '#94a3b8';
+        const colors = [
+            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+            '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#06b6d4'
+        ];
+        let hash = 0;
+        for (let i = 0; i < ownerId.length; i++) {
+            const char = ownerId.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return colors[Math.abs(hash) % colors.length];
     }
 
     loadOwners() {
@@ -496,7 +613,8 @@ export default class DynamicGantt extends LightningElement {
     _loadLevel2(parentId) {
         const fields = [
             this.level2SidebarFields,
-            this.level2PopupFields,
+            this.level2Section1Fields,
+            this.level2Section2Fields,
             this.level2StartDate,
             this.level2EndDate,
             this.level2PlannedStartDate,
@@ -523,7 +641,8 @@ export default class DynamicGantt extends LightningElement {
 
     _loadLevel3(parentId) {
         const fields = [
-            this.level3PopupFields,
+            this.level3Section1Fields,
+            this.level3Section2Fields,
             this.level3StartDate,
             this.level3EndDate,
             this.level3PlannedStartDate,
@@ -556,6 +675,16 @@ export default class DynamicGantt extends LightningElement {
         const targetEndDate = this._getTargetEndDate(item.record, 1);
         const statusValue = this._getStatusValue(item.record, this.level1Progress);
         const progress = Math.min(Math.max(item.progress || 0, 0), 100);
+        const fillClass = this._barFillClass(statusValue, progress);
+        
+        const isComplete = fillClass.includes('complete');
+        let completedEarlyStyle = null;
+        if (isComplete && actualEndDate && targetEndDate && actualEndDate.getTime() < targetEndDate.getTime()) {
+            completedEarlyStyle = this.calculateBarStyle(actualEndDate, targetEndDate);
+        }
+
+        const outlineStyle = this._calculateOutlineBarStyle(plannedStartDate, targetEndDate || plannedEndDate);
+
         return {
             ...item,
             _l2Loaded: false,
@@ -564,13 +693,15 @@ export default class DynamicGantt extends LightningElement {
             iconClass: 'expand-icon',
             children: [],
             duration: this.calculateDuration(actualStartDate, actualEndDate),
-            plannedBarStyle: this.calculateBarStyle(plannedStartDate, plannedEndDate),
-            barStyle: this.calculateBarStyle(actualStartDate, actualEndDate),
-            targetEndStyle: this.calculateTargetMarkerStyle(targetEndDate),
-            barClass: 'gantt-bar-item actual-bar-item',
-            progressStyle: `width: ${progress}%;`,
-            progressLabel: item.record.Name || '',
-            fillClass: this._barFillClass(statusValue, progress),
+            plannedBarStyle: outlineStyle,
+            barStyle: this.calculateBarStyle(actualStartDate || plannedStartDate, actualEndDate),
+            completedEarlyStyle,
+            targetEndStyle: this._calculateTargetMarkerStyleFromBarStyle(outlineStyle, targetEndDate || plannedEndDate),
+            barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}`,
+            progressStyle: this._buildProgressStyle(progress, statusValue),
+            progressLabel: statusValue || '',
+            statusLabelClass: this._getStatusLabelClass(statusValue, actualStartDate, actualEndDate),
+            fillClass,
             hoverText: this._buildHoverText(
                 item.record,
                 1,
@@ -581,6 +712,9 @@ export default class DynamicGantt extends LightningElement {
                 progress
             ),
             ownerName: item.record?.Owner?.Name || '',
+            ownerInitials: this._getOwnerInitials(item.record?.Owner?.Name || ''),
+            ownerColor: this._getOwnerColor(item.record?.OwnerId || ''),
+            ownerAvatarStyle: `background-color: ${this._getOwnerColor(item.record?.OwnerId || '')}; color: #ffffff;`,
             ownerId: item.record?.OwnerId || ''
         };
     }
@@ -595,6 +729,15 @@ export default class DynamicGantt extends LightningElement {
         const progress = Math.min(Math.max(child.progress || 0, 0), 100);
         const statusValue = this._getStatusValue(child.record, statusField);
         const duration = this.calculateDuration(actualStartDate, actualEndDate);
+        const fillClass = this._barFillClass(statusValue, progress);
+
+        const isComplete = fillClass.includes('complete');
+        let completedEarlyStyle = null;
+        if (isComplete && actualEndDate && targetEndDate && actualEndDate.getTime() < targetEndDate.getTime()) {
+            completedEarlyStyle = this.calculateBarStyle(actualEndDate, targetEndDate);
+        }
+
+        const outlineStyle = this._calculateOutlineBarStyle(plannedStartDate, targetEndDate || plannedEndDate);
 
         return {
             ...child,
@@ -602,16 +745,21 @@ export default class DynamicGantt extends LightningElement {
             rowClass: level === 2 ? 'l2-row' : 'l3-row',
             iconClass: 'expand-icon',
             duration,
-            plannedBarStyle: this.calculateBarStyle(plannedStartDate, plannedEndDate),
-            barStyle: this.calculateBarStyle(actualStartDate, actualEndDate),
-            targetEndStyle: this.calculateTargetMarkerStyle(targetEndDate),
-            barClass: level === 2 ? 'gantt-bar-item actual-bar-item' : 'gantt-bar-item l3-bar actual-bar-item',
-            progressStyle: `width: ${progress}%;`,
-            progressLabel: '',
-            fillClass: this._barFillClass(statusValue, progress),
+            plannedBarStyle: outlineStyle,
+            barStyle: this.calculateBarStyle(actualStartDate || plannedStartDate, actualEndDate),
+            completedEarlyStyle,
+            targetEndStyle: this._calculateTargetMarkerStyleFromBarStyle(outlineStyle, targetEndDate || plannedEndDate),
+            barClass: `${level === 2 ? 'gantt-bar-item actual-bar-item' : 'gantt-bar-item l3-bar actual-bar-item'} ${this._barToneClass(fillClass)}`,
+            progressStyle: this._buildProgressStyle(progress, statusValue),
+            progressLabel: statusValue || '',
+            statusLabelClass: this._getStatusLabelClass(statusValue, actualStartDate, actualEndDate),
+            fillClass,
             hoverText: this._buildHoverText(child.record, level, statusValue, actualStartDate, actualEndDate, duration, progress),
             children: [],
             ownerName: child.record?.Owner?.Name || '',
+            ownerInitials: this._getOwnerInitials(child.record?.Owner?.Name || ''),
+            ownerColor: this._getOwnerColor(child.record?.OwnerId || ''),
+            ownerAvatarStyle: `background-color: ${this._getOwnerColor(child.record?.OwnerId || '')}; color: #ffffff;`,
             ownerId: child.record?.OwnerId || ''
         };
     }
@@ -776,7 +924,14 @@ export default class DynamicGantt extends LightningElement {
         this.selectedRecordId = event.currentTarget.dataset.id;
         this.selectedObjectApi = this.level1Object;
         this.selectedLevel = 1;
-        this.popupFields = this._parseFields(this.level1PopupFields);
+        this.section1 = {
+            name: this.level1Section1Name,
+            fields: this._parseFields(this.level1Section1Fields)
+        };
+        this.section2 = {
+            name: this.level1Section2Name,
+            fields: this._parseFields(this.level1Section2Fields)
+        };
         this.isEditMode = false;
     }
 
@@ -791,13 +946,37 @@ export default class DynamicGantt extends LightningElement {
         this.selectedRecordId = id;
         this.selectedLevel = level;
         this.selectedObjectApi = level === 3 ? this.level3Object : this.level2Object;
-        this.popupFields = this._parseFields(level === 3 ? this.level3PopupFields : this.level2PopupFields);
+        this.section1 = {
+            name: level === 3 ? this.level3Section1Name : this.level2Section1Name,
+            fields: this._parseFields(level === 3 ? this.level3Section1Fields : this.level2Section1Fields)
+        };
+        this.section2 = {
+            name: level === 3 ? this.level3Section2Name : this.level2Section2Name,
+            fields: this._parseFields(level === 3 ? this.level3Section2Fields : this.level2Section2Fields)
+        };
         this.isEditMode = false;
     }
 
     handleBarDragStart(event) {
         if (event.button !== 0 || this.isSavingChange) {
             return;
+        }
+
+        const path = event.composedPath ? event.composedPath() : [event.target];
+        let mode = 'move';
+        if (path.some(el => el.classList && el.classList.contains('drag-handle-left'))) {
+            mode = 'resize-start';
+        } else if (path.some(el => el.classList && el.classList.contains('drag-handle-right'))) {
+            mode = 'resize-end';
+        } else {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const edgeThreshold = Math.min(10, Math.max(6, rect.width * 0.15));
+            const offsetX = event.clientX - rect.left;
+            if (offsetX <= edgeThreshold) {
+                mode = 'resize-start';
+            } else if ((rect.right - event.clientX) <= edgeThreshold) {
+                mode = 'resize-end';
+            }
         }
 
         const id = event.currentTarget.dataset.id;
@@ -820,6 +999,7 @@ export default class DynamicGantt extends LightningElement {
         this.dragState = {
             id,
             level,
+            mode,
             objectApi: this._getObjectApiByLevel(level),
             startX: event.clientX,
             movedDays: 0,
@@ -843,6 +1023,30 @@ export default class DynamicGantt extends LightningElement {
         this.dragState.movedDays = dayOffset;
         this.dragState.didDrag = true;
         this._applyDragPreview(this.dragState.id, this.dragState.level, dayOffset);
+        this._updateDragTooltip(event, dayOffset);
+    }
+
+    _updateDragTooltip(event, dayOffset) {
+        if (!this.dragState) return;
+        const { id, level, mode } = this.dragState;
+        const item = this._findItem(id, level);
+        if (!item) return;
+        const shifted = this._buildShiftedDatesForMode(item.record, level, dayOffset, mode);
+        let label, date;
+        if (mode === 'resize-start') {
+            label = 'START DATE';
+            date = shifted.actualStart;
+        } else if (mode === 'resize-end') {
+            label = 'END DATE';
+            date = shifted.actualEnd;
+        } else {
+            label = 'START DATE';
+            date = shifted.actualStart;
+        }
+        const vw = window.innerWidth || 640;
+        const x = Math.min(event.clientX + 10, vw - 118);
+        const y = Math.max(event.clientY - 42, 8);
+        this.dragTooltip = { visible: true, label, dateStr: this._formatDate(date), style: `left:${x}px;top:${y}px;` };
     }
 
     async handleBarDragEnd() {
@@ -850,6 +1054,7 @@ export default class DynamicGantt extends LightningElement {
             return;
         }
 
+        this.dragTooltip = { visible: false, label: '', dateStr: '', style: '' };
         const drag = this.dragState;
         this.dragState = null;
 
@@ -873,9 +1078,36 @@ export default class DynamicGantt extends LightningElement {
             return;
         }
 
-        const shiftedDates = this._buildShiftedDatesForItem(item.record, drag.level, drag.movedDays);
+        const mode = drag.mode || 'move';
+        const shiftedDates = this._buildShiftedDatesForMode(item.record, drag.level, drag.movedDays, mode);
         const before = this._buildFieldValueMapFromDates(drag.level, drag.originalDates);
         const after = this._buildFieldValueMapFromDates(drag.level, shiftedDates);
+
+        const changes = [];
+        if (mode === 'move' || mode === 'resize-start') {
+            changes.push({
+                key: 'start',
+                label: 'Start Date',
+                before: this._formatDate(drag.originalDates.actualStart),
+                after: this._formatDate(shiftedDates.actualStart)
+            });
+        }
+        if (mode === 'move' || mode === 'resize-end') {
+            changes.push({
+                key: 'end',
+                label: 'End Date',
+                before: this._formatDate(drag.originalDates.actualEnd),
+                after: this._formatDate(shiftedDates.actualEnd)
+            });
+        }
+
+        const absDays = Math.abs(drag.movedDays);
+        const dir = drag.movedDays > 0 ? 'later' : 'earlier';
+        const description = mode === 'resize-start'
+            ? `Shift start date by ${absDays} day(s) ${dir}?`
+            : mode === 'resize-end'
+                ? `Shift end date by ${absDays} day(s) ${dir}?`
+                : `Move this item by ${drag.movedDays} day(s)?`;
 
         this.dragConfirm = {
             visible: true,
@@ -886,20 +1118,8 @@ export default class DynamicGantt extends LightningElement {
             itemLabel: item.record?.Name || 'Record',
             before,
             after,
-            changes: [
-                {
-                    key: 'start',
-                    label: 'Start',
-                    before: this._formatDate(drag.originalDates.actualStart),
-                    after: this._formatDate(shiftedDates.actualStart)
-                },
-                {
-                    key: 'end',
-                    label: 'End',
-                    before: this._formatDate(drag.originalDates.actualEnd),
-                    after: this._formatDate(shiftedDates.actualEnd)
-                }
-            ]
+            changes,
+            description
         };
     }
 
@@ -949,6 +1169,13 @@ export default class DynamicGantt extends LightningElement {
         this.inlineEditPendingValues = null;
     }
 
+    undoInlineEdit() {
+        const inputFields = this.template.querySelectorAll('lightning-input-field');
+        if (inputFields) {
+            inputFields.forEach(field => field.reset());
+        }
+    }
+
     saveInlineEdit() {
         const form = this.template.querySelector('.modal-edit-form');
         if (form) {
@@ -959,22 +1186,35 @@ export default class DynamicGantt extends LightningElement {
     handleInlineEditSubmit(event) {
         event.preventDefault();
         const fields = { ...(event.detail?.fields || {}) };
+        const level = this.selectedLevel || this.inlineEditBaseline?.level || 1;
+        const recordId = this.selectedRecordId || this.inlineEditBaseline?.recordId;
+        const normalizedFields = this._augmentFieldValuesForStatus(fields, level, recordId);
         const values = {};
-        Object.keys(fields).forEach((fieldName) => {
-            const raw = fields[fieldName];
+        Object.keys(normalizedFields).forEach((fieldName) => {
+            const raw = normalizedFields[fieldName];
             values[fieldName] = raw && typeof raw === 'object' && 'value' in raw ? raw.value : raw;
         });
         this.inlineEditPendingValues = values;
 
         const form = this.template.querySelector('.modal-edit-form');
         if (form) {
-            form.submit(fields);
+            form.submit(normalizedFields);
         }
     }
 
-    handleInlineEditSuccess() {
+    handleInlineEditSuccess(event) {
         const baseline = this.inlineEditBaseline;
         const after = this.inlineEditPendingValues || {};
+        
+        // If programmatic submit bypassed onsubmit, or as a fallback, pull from success event
+        if (event && event.detail && event.detail.fields) {
+            const successFields = event.detail.fields;
+            Object.keys(successFields).forEach((key) => {
+                const valObj = successFields[key];
+                after[key] = valObj && typeof valObj === 'object' && 'value' in valObj ? valObj.value : valObj;
+            });
+        }
+        
         if (baseline && Object.keys(after).length) {
             this.changeHistory = [
                 ...this.changeHistory,
@@ -991,7 +1231,6 @@ export default class DynamicGantt extends LightningElement {
         }
         this.isEditMode = false;
         this.inlineEditPendingValues = null;
-        this.reloadChart();
     }
 
     handleInlineEditError(event) {
@@ -1015,7 +1254,6 @@ export default class DynamicGantt extends LightningElement {
                 this.changeHistory = this.changeHistory.slice(0, -1);
                 this._applyRecordFieldValues(lastChange.recordId, lastChange.level, lastChange.before);
                 this._refreshView();
-                this.reloadChart();
             })
             .catch((error) => {
                 this.errorMessage = `Undo failed: ${this._msg(error)}`;
@@ -1049,6 +1287,9 @@ export default class DynamicGantt extends LightningElement {
     }
 
     handleBarHover(event) {
+        if (this.dragState) {
+            return;
+        }
         const id = event.currentTarget.dataset.id;
         const level = parseInt(event.currentTarget.dataset.level || '1', 10);
         const item = this._findItem(id, level);
@@ -1073,7 +1314,7 @@ export default class DynamicGantt extends LightningElement {
     }
 
     handleBarMove(event) {
-        if (!this.tooltip.visible) {
+        if (this.dragState || !this.tooltip.visible) {
             return;
         }
         this.tooltip = {
@@ -1083,6 +1324,9 @@ export default class DynamicGantt extends LightningElement {
     }
 
     handleTargetHover(event) {
+        if (this.dragState) {
+            return;
+        }
         event.stopPropagation();
         const id = event.currentTarget.dataset.id;
         const level = parseInt(event.currentTarget.dataset.level || '1', 10);
@@ -1104,7 +1348,7 @@ export default class DynamicGantt extends LightningElement {
 
     handleTargetMove(event) {
         event.stopPropagation();
-        if (!this.tooltip.visible) {
+        if (this.dragState || !this.tooltip.visible) {
             return;
         }
         this.tooltip = {
@@ -1114,6 +1358,9 @@ export default class DynamicGantt extends LightningElement {
     }
 
     hideTooltip() {
+        if (this.dragState) {
+            return;
+        }
         if (this.tooltip.visible) {
             this.tooltip = { visible: false, title: '', details: [], style: '' };
         }
@@ -1128,6 +1375,50 @@ export default class DynamicGantt extends LightningElement {
             .catch(() => {
                 this._refreshView();
             });
+    }
+
+    _augmentFieldValuesForStatus(fields, level, recordId) {
+        const nextFields = { ...(fields || {}) };
+        const statusField = this._getStatusField(level);
+        if (!statusField || !(statusField in nextFields)) {
+            return nextFields;
+        }
+
+        const item = this._findItem(recordId, level);
+        const record = item?.record;
+        const normalizedStatus = String(nextFields[statusField] || '').trim().toLowerCase();
+        const actualStartField = this._getActualStartField(level);
+        const actualEndField = this._getActualEndField(level);
+        const today = this._formatDateForApex(this._getCurrentDate());
+        const seedStartDate = this._getPlannedStartDate(record, level) || this._getActualStartDate(record, level) || this._getCurrentDate();
+        const seedStartDateValue = this._formatDateForApex(seedStartDate);
+
+        const isNotStarted =
+            normalizedStatus.includes('new') ||
+            normalizedStatus.includes('not') ||
+            normalizedStatus.includes('open') ||
+            normalizedStatus.includes('todo') ||
+            normalizedStatus.includes('draft') ||
+            normalizedStatus.includes('queued');
+        const isStarted = !isNotStarted && !!normalizedStatus;
+        const isComplete =
+            normalizedStatus.includes('complete') ||
+            normalizedStatus.includes('completed') ||
+            normalizedStatus.includes('done') ||
+            normalizedStatus.includes('closed') ||
+            normalizedStatus.includes('finished') ||
+            normalizedStatus.includes('resolved') ||
+            normalizedStatus.includes('approved');
+
+        if (actualStartField && !nextFields[actualStartField]) {
+            nextFields[actualStartField] = seedStartDateValue;
+        }
+
+        if (actualEndField && normalizedStatus) {
+            nextFields[actualEndField] = today;
+        }
+
+        return nextFields;
     }
 
     handleStatusFilterChange(event) {
@@ -1398,6 +1689,17 @@ export default class DynamicGantt extends LightningElement {
         }
     }
 
+    _calculateTargetMarkerStyleFromBarStyle(barStyle, fallbackDate) {
+        const leftMatch = String(barStyle || '').match(/left:([0-9.]+)%/);
+        const widthMatch = String(barStyle || '').match(/width:([0-9.]+)%/);
+        if (leftMatch && widthMatch) {
+            const left = parseFloat(leftMatch[1]);
+            const width = parseFloat(widthMatch[1]);
+            return `left:${Math.max(0, Math.min(100, left + width)).toFixed(2)}%; display:block;`;
+        }
+        return this.calculateTargetMarkerStyle(fallbackDate);
+    }
+
     _getPixelsPerDay() {
         if (!this.startDateLimit || !this.endDateLimit) {
             return 0;
@@ -1444,6 +1746,29 @@ export default class DynamicGantt extends LightningElement {
         return { plannedStart, plannedEnd, actualStart, actualEnd, targetEnd };
     }
 
+    _buildShiftedDatesForMode(record, level, days, mode) {
+        const plannedStart = this._getPlannedStartDate(record, level);
+        const plannedEnd = this._getPlannedEndDate(record, level);
+        const actualStart = this._getActualStartDate(record, level);
+        const actualEnd = this._getActualEndDate(record, level);
+        const targetEnd = this._getTargetEndDate(record, level);
+        if (mode === 'resize-start') {
+            let nextStart = this._shiftDate(actualStart, days);
+            if (nextStart && actualEnd && nextStart.getTime() > actualEnd.getTime()) {
+                nextStart = new Date(actualEnd.getTime());
+            }
+            return { plannedStart, plannedEnd, actualStart: nextStart, actualEnd, targetEnd };
+        }
+        if (mode === 'resize-end') {
+            let nextEnd = this._shiftDate(actualEnd, days);
+            if (actualStart && nextEnd && nextEnd.getTime() < actualStart.getTime()) {
+                nextEnd = new Date(actualStart.getTime());
+            }
+            return { plannedStart, plannedEnd, actualStart, actualEnd: nextEnd, targetEnd };
+        }
+        return this._buildShiftedDatesForItem(record, level, days);
+    }
+
     _buildFieldValueMapFromDates(level, dates) {
         const values = {};
         const setIfField = (fieldName, dateValue) => {
@@ -1461,16 +1786,53 @@ export default class DynamicGantt extends LightningElement {
         return values;
     }
 
+    _buildProgressStyle(progress, statusValue) {
+        const width = progress > 0 ? progress : (statusValue ? 100 : 0);
+        return `width: ${Math.max(0, Math.min(100, width))}%;`;
+    }
+
+    _calculateOutlineBarStyle(start, end) {
+        return this.calculateBarStyle(start, end);
+    }
+
+    _barToneClass(fillClass) {
+        const tone = String(fillClass || '').match(/status-([a-z-]+)/)?.[1];
+        return tone ? `bar-tone-${tone}` : 'bar-tone-na';
+    }
+
+    _getBarPixelWidth(start, end) {
+        if (!start || !this.startDateLimit || !this.endDateLimit) {
+            return 0;
+        }
+        const timelineRange = this.endDateLimit.getTime() - this.startDateLimit.getTime();
+        if (timelineRange <= 0) {
+            return 0;
+        }
+        const endTime = end && !Number.isNaN(end?.getTime?.()) ? end.getTime() + DAY_MS : start.getTime() + DAY_MS;
+        const durationMs = Math.max(DAY_MS, Math.max(0, endTime - start.getTime()));
+        const chartWidth = Math.max(this.timelineMonths.length * this.timelineUnitWidthPx, this.timelineUnitWidthPx);
+        return (durationMs / timelineRange) * chartWidth;
+    }
+
+    _getStatusLabelClass(statusValue, start, end) {
+        const label = String(statusValue || '').trim();
+        const estimatedLabelWidth = (label.length * 6.8) + 22;
+        return this._getBarPixelWidth(start, end) < estimatedLabelWidth
+            ? 'bar-status-label compact'
+            : 'bar-status-label';
+    }
+
     _applyDragPreview(recordId, level, days) {
         const item = this._findItem(recordId, level);
         if (!item) {
             return;
         }
-        const shiftedDates = this._buildShiftedDatesForItem(item.record, level, days);
-        const nextDuration = this.calculateDuration(shiftedDates.actualStart, shiftedDates.actualEnd);
-        const nextBarStyle = this.calculateBarStyle(shiftedDates.actualStart, shiftedDates.actualEnd);
-        const nextPlanStyle = this.calculateBarStyle(shiftedDates.plannedStart, shiftedDates.plannedEnd);
-        const nextTargetStyle = this.calculateTargetMarkerStyle(shiftedDates.targetEnd);
+        const mode = this.dragState?.mode || 'move';
+        const shiftedDates = this._buildShiftedDatesForMode(item.record, level, days, mode);
+        const nextDuration = this.calculateDuration(shiftedDates.actualStart || shiftedDates.plannedStart, shiftedDates.actualEnd);
+        const nextBarStyle = this.calculateBarStyle(shiftedDates.actualStart || shiftedDates.plannedStart, shiftedDates.actualEnd);
+        const nextPlanStyle = this._calculateOutlineBarStyle(shiftedDates.plannedStart, shiftedDates.targetEnd || shiftedDates.plannedEnd);
+        const nextTargetStyle = this._calculateTargetMarkerStyleFromBarStyle(nextPlanStyle, shiftedDates.targetEnd || shiftedDates.plannedEnd);
 
         const updater = (entry) => {
             if (!entry || !entry.record || entry.record.Id !== recordId) {
@@ -1482,6 +1844,11 @@ export default class DynamicGantt extends LightningElement {
                 barStyle: nextBarStyle,
                 plannedBarStyle: nextPlanStyle,
                 targetEndStyle: nextTargetStyle,
+                statusLabelClass: this._getStatusLabelClass(
+                    this._getStatusValue(entry.record, this._getStatusField(level)),
+                    shiftedDates.actualStart,
+                    shiftedDates.actualEnd
+                ),
                 hoverText: this._buildHoverText(
                     entry.record,
                     level,
@@ -1510,9 +1877,8 @@ export default class DynamicGantt extends LightningElement {
             return;
         }
 
-        const before = this._buildFieldValueMapFromDates(drag.level, drag.originalDates);
-        const shiftedDates = this._buildShiftedDatesForItem(item.record, drag.level, drag.movedDays);
-        const after = this._buildFieldValueMapFromDates(drag.level, shiftedDates);
+        const before = drag.before;
+        const after = drag.after;
 
         this.isSavingChange = true;
         updateRecordFields({
@@ -1533,7 +1899,6 @@ export default class DynamicGantt extends LightningElement {
                 ];
                 this._applyRecordFieldValues(drag.id, drag.level, after);
                 this._refreshView();
-                this.reloadChart();
             })
             .catch((error) => {
                 this.errorMessage = `Failed to update dates: ${this._msg(error)}`;
@@ -1780,12 +2145,13 @@ export default class DynamicGantt extends LightningElement {
         const buildLevel3 = (item) => {
             const isSearchMatch = this._nameIncludes(item.record.Name, searchTerm);
             if (isSearchMatch && searchTerm) matchCount += 1;
-            const visible = this._matchesStatus(item.record, this.level3Progress) && this._matchesOwner(item) && (!searchTerm || isSearchMatch);
+            const visible = this._matchesStatus(item.record, this.level3Progress) && this._matchesOwner(item);
             if (!visible) {
                 return null;
             }
             return {
                 ...item,
+                _searchMatch: isSearchMatch,
                 rowClass: isSearchMatch && searchTerm ? 'l3-row search-highlight' : 'l3-row'
             };
         };
@@ -1796,16 +2162,18 @@ export default class DynamicGantt extends LightningElement {
             if (isSearchMatch && searchTerm) matchCount += 1;
             const directVisible =
                 this._matchesStatus(item.record, this.level2Progress) &&
-                this._matchesOwner(item) &&
-                (!searchTerm || isSearchMatch);
+                this._matchesOwner(item);
             if (!directVisible && children.length === 0) {
                 return null;
             }
-            const expandedForView = item.expanded || (hasActiveQuery && children.length > 0);
+            const hasMatchedDescendant = children.some((child) => child?._searchMatch);
+            const expandedForView = item.expanded || ((hasActiveQuery && children.length > 0) || (searchTerm && hasMatchedDescendant));
             return {
                 ...item,
                 expanded: expandedForView,
                 children,
+                _searchMatch: isSearchMatch,
+                _hasMatchedDescendant: hasMatchedDescendant,
                 rowClass:
                     isSearchMatch && searchTerm
                         ? 'l2-row search-highlight'
@@ -1822,16 +2190,17 @@ export default class DynamicGantt extends LightningElement {
                 if (isSearchMatch && searchTerm) matchCount += 1;
                 const directVisible =
                     this._matchesStatus(item.record, this.level1Progress) &&
-                    this._matchesOwner(item) &&
-                    (!searchTerm || isSearchMatch);
+                    this._matchesOwner(item);
                 if (!directVisible && children.length === 0) {
                     return null;
                 }
-                const expandedForView = item.expanded || (hasActiveQuery && children.length > 0);
+                const hasMatchedDescendant = children.some((child) => child?._searchMatch || child?._hasMatchedDescendant);
+                const expandedForView = item.expanded || ((hasActiveQuery && children.length > 0) || (searchTerm && hasMatchedDescendant));
                 return {
                     ...item,
                     expanded: expandedForView,
                     children,
+                    _searchMatch: isSearchMatch,
                     rowClass:
                         isSearchMatch && searchTerm
                             ? 'l1-item search-highlight'
@@ -1856,12 +2225,23 @@ export default class DynamicGantt extends LightningElement {
             const l1TargetEnd = this._getTargetEndDate(l1.record, 1);
             const l1Progress = Math.min(Math.max(l1.progress || 0, 0), 100);
             const l1Status = this._getStatusValue(l1.record, this.level1Progress);
+            const l1FillClass = this._barFillClass(l1Status, l1Progress);
+            let l1CompletedEarlyStyle = null;
+            if (l1FillClass.includes('complete') && l1ActualEnd && l1TargetEnd && l1ActualEnd.getTime() < l1TargetEnd.getTime()) {
+                l1CompletedEarlyStyle = this.calculateBarStyle(l1ActualEnd, l1TargetEnd);
+            }
+            const l1OutlineStyle = this._calculateOutlineBarStyle(l1PlannedStart, l1TargetEnd || l1PlannedEnd);
             return {
                 ...l1,
-                plannedBarStyle: this.calculateBarStyle(l1PlannedStart, l1PlannedEnd),
-                barStyle: this.calculateBarStyle(l1ActualStart, l1ActualEnd),
-                targetEndStyle: this.calculateTargetMarkerStyle(l1TargetEnd),
-                fillClass: this._barFillClass(l1Status, l1Progress),
+                plannedBarStyle: l1OutlineStyle,
+                barStyle: this.calculateBarStyle(l1ActualStart || l1PlannedStart, l1ActualEnd),
+                completedEarlyStyle: l1CompletedEarlyStyle,
+                targetEndStyle: this._calculateTargetMarkerStyleFromBarStyle(l1OutlineStyle, l1TargetEnd || l1PlannedEnd),
+                barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(l1FillClass)}`,
+                fillClass: l1FillClass,
+                progressStyle: this._buildProgressStyle(l1Progress, l1Status),
+                progressLabel: l1Status || '',
+                statusLabelClass: this._getStatusLabelClass(l1Status, l1ActualStart, l1ActualEnd),
                 hoverText: this._buildHoverText(
                     l1.record,
                     1,
@@ -1879,14 +2259,23 @@ export default class DynamicGantt extends LightningElement {
                     const l2TargetEnd = this._getTargetEndDate(l2.record, 2);
                     const l2Progress = Math.min(Math.max(l2.progress || 0, 0), 100);
                     const l2Status = this._getStatusValue(l2.record, this.level2Progress);
+                    const l2FillClass = this._barFillClass(l2Status, l2Progress);
+                    let l2CompletedEarlyStyle = null;
+                    if (l2FillClass.includes('complete') && l2ActualEnd && l2TargetEnd && l2ActualEnd.getTime() < l2TargetEnd.getTime()) {
+                        l2CompletedEarlyStyle = this.calculateBarStyle(l2ActualEnd, l2TargetEnd);
+                    }
+                    const l2OutlineStyle = this._calculateOutlineBarStyle(l2PlannedStart, l2TargetEnd || l2PlannedEnd);
                     return {
                         ...l2,
-                        plannedBarStyle: this.calculateBarStyle(l2PlannedStart, l2PlannedEnd),
-                        barStyle: this.calculateBarStyle(l2ActualStart, l2ActualEnd),
-                        targetEndStyle: this.calculateTargetMarkerStyle(l2TargetEnd),
-                        progressStyle: `width: ${l2Progress}%;`,
-                        progressLabel: '',
-                        fillClass: this._barFillClass(l2Status, l2Progress),
+                        plannedBarStyle: l2OutlineStyle,
+                        barStyle: this.calculateBarStyle(l2ActualStart || l2PlannedStart, l2ActualEnd),
+                        completedEarlyStyle: l2CompletedEarlyStyle,
+                        targetEndStyle: this._calculateTargetMarkerStyleFromBarStyle(l2OutlineStyle, l2TargetEnd || l2PlannedEnd),
+                        barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(l2FillClass)}`,
+                        progressStyle: this._buildProgressStyle(l2Progress, l2Status),
+                        progressLabel: l2Status || '',
+                        statusLabelClass: this._getStatusLabelClass(l2Status, l2ActualStart, l2ActualEnd),
+                        fillClass: l2FillClass,
                         hoverText: this._buildHoverText(
                             l2.record,
                             2,
@@ -1904,14 +2293,23 @@ export default class DynamicGantt extends LightningElement {
                             const l3TargetEnd = this._getTargetEndDate(l3.record, 3);
                             const l3Progress = Math.min(Math.max(l3.progress || 0, 0), 100);
                             const l3Status = this._getStatusValue(l3.record, this.level3Progress);
+                            const l3FillClass = this._barFillClass(l3Status, l3Progress);
+                            let l3CompletedEarlyStyle = null;
+                            if (l3FillClass.includes('complete') && l3ActualEnd && l3TargetEnd && l3ActualEnd.getTime() < l3TargetEnd.getTime()) {
+                                l3CompletedEarlyStyle = this.calculateBarStyle(l3ActualEnd, l3TargetEnd);
+                            }
+                            const l3OutlineStyle = this._calculateOutlineBarStyle(l3PlannedStart, l3TargetEnd || l3PlannedEnd);
                             return {
                                 ...l3,
-                                plannedBarStyle: this.calculateBarStyle(l3PlannedStart, l3PlannedEnd),
-                                barStyle: this.calculateBarStyle(l3ActualStart, l3ActualEnd),
-                                targetEndStyle: this.calculateTargetMarkerStyle(l3TargetEnd),
-                                progressStyle: `width: ${l3Progress}%;`,
-                                progressLabel: '',
-                                fillClass: this._barFillClass(l3Status, l3Progress),
+                                plannedBarStyle: l3OutlineStyle,
+                                barStyle: this.calculateBarStyle(l3ActualStart || l3PlannedStart, l3ActualEnd),
+                                completedEarlyStyle: l3CompletedEarlyStyle,
+                                targetEndStyle: this._calculateTargetMarkerStyleFromBarStyle(l3OutlineStyle, l3TargetEnd || l3PlannedEnd),
+                                barClass: `gantt-bar-item l3-bar actual-bar-item ${this._barToneClass(l3FillClass)}`,
+                                progressStyle: this._buildProgressStyle(l3Progress, l3Status),
+                                progressLabel: l3Status || '',
+                                statusLabelClass: this._getStatusLabelClass(l3Status, l3ActualStart, l3ActualEnd),
+                                fillClass: l3FillClass,
                                 hoverText: this._buildHoverText(
                                     l3.record,
                                     3,
@@ -1964,8 +2362,18 @@ export default class DynamicGantt extends LightningElement {
     }
 
     _normalizeTone(tone) {
-        if (['not-started', 'progress', 'complete', 'risk'].includes(tone)) {
-            return tone;
+        const normalized = String(tone || '').trim().toLowerCase();
+        if (['not-started', 'not started', 'not_started', 'notstarted', 'new', 'blue'].includes(normalized)) {
+            return 'not-started';
+        }
+        if (['progress', 'in progress', 'in-progress', 'active'].includes(normalized)) {
+            return 'progress';
+        }
+        if (['complete', 'completed', 'done', 'green'].includes(normalized)) {
+            return 'complete';
+        }
+        if (['risk', 'at risk', 'blocked', 'pending', 'orange', 'amber', 'red'].includes(normalized)) {
+            return 'risk';
         }
         return '';
     }
@@ -2148,12 +2556,12 @@ export default class DynamicGantt extends LightningElement {
             }
         }
 
-        const sidebarWidth = 520;
-        const chartWidth = Math.max(this.timelineMonths.length * TIMELINE_CELL_WIDTH_PX, 900);
+        const sidebarWidth = this.sidebarWidthPx;
+        const chartWidth = Math.max(this.timelineMonths.length * this.timelineUnitWidthPx, this.timelineUnitWidthPx);
         const headerHeight = 44;
         const filterHeight = 44;
-        const rowHeightL1 = 38;
-        const rowHeightChild = 34;
+        const rowHeightL1 = 36;
+        const rowHeightChild = 32;
         const contentHeight = rows.reduce((sum, row) => sum + (row.type === 'l1' ? rowHeightL1 : rowHeightChild), 0) || 220;
         const width = sidebarWidth + chartWidth;
         const height = headerHeight + filterHeight + headerHeight + contentHeight;
@@ -2168,28 +2576,31 @@ export default class DynamicGantt extends LightningElement {
 
         ctx.fillStyle = '#f7f7f7';
         ctx.fillRect(0, headerHeight + filterHeight, width, headerHeight);
-        ctx.strokeStyle = '#0176d3';
+        ctx.strokeStyle = '#0055b3';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(0, headerHeight + filterHeight + headerHeight);
         ctx.lineTo(width, headerHeight + filterHeight + headerHeight);
         ctx.stroke();
 
+        const nameX = 18;
+        const durationX = SIDEBAR_FRAME_PX + this.nameColWidth + COLUMN_GAP_PX + 6;
+        const ownerX = SIDEBAR_FRAME_PX + this.nameColWidth + this.durationColWidth + (COLUMN_GAP_PX * 2) + 6;
         ctx.font = '700 11px Segoe UI';
         ctx.fillStyle = '#475569';
-        ctx.fillText('NAME', 18, headerHeight + filterHeight + 26);
-            ctx.fillText('DURATION', 330, headerHeight + filterHeight + 26);
-        ctx.fillText('OWNER', 438, headerHeight + filterHeight + 26);
+        ctx.fillText('NAME', nameX, headerHeight + filterHeight + 26);
+        ctx.fillText('DURATION', durationX, headerHeight + filterHeight + 26);
+        ctx.fillText('OWNER', ownerX, headerHeight + filterHeight + 26);
 
         this.timelineMonths.forEach((month, index) => {
-            const x = sidebarWidth + index * TIMELINE_CELL_WIDTH_PX;
+            const x = sidebarWidth + index * this.timelineUnitWidthPx;
             ctx.strokeStyle = '#e8edf3';
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(x, headerHeight + filterHeight);
             ctx.lineTo(x, height);
             ctx.stroke();
-            ctx.fillStyle = month.cellClass.includes('is-current') ? '#0176d3' : '#64748b';
+            ctx.fillStyle = month.cellClass.includes('is-current') ? '#0055b3' : '#64748b';
             ctx.font = '700 11px Segoe UI';
             ctx.fillText(month.label, x + 8, headerHeight + filterHeight + 26);
         });
@@ -2236,20 +2647,20 @@ export default class DynamicGantt extends LightningElement {
 
             ctx.fillStyle = '#334155';
             ctx.font = row.type === 'l1' ? '700 12px Segoe UI' : '500 12px Segoe UI';
-            const textX = row.type === 'l1' ? 28 : row.type === 'l2' ? 46 : 64;
+            const textX = row.type === 'l1' ? 28 : row.type === 'l2' ? 44 : 58;
             ctx.fillText(row.item.record?.Name || '', textX, currentY + 22);
             ctx.fillStyle = '#64748b';
             ctx.font = '700 11px Segoe UI';
-            ctx.fillText(row.item.duration || '', 330, currentY + 22);
-            ctx.fillText(row.item.ownerName || '', 438, currentY + 22);
+            ctx.fillText(row.item.duration || '', durationX, currentY + 22);
+            ctx.fillText(row.item.ownerName || '', ownerX, currentY + 22);
 
             const leftMatch = String(row.item.barStyle || '').match(/left:([0-9.]+)%/);
             const widthMatch = String(row.item.barStyle || '').match(/width:([0-9.]+)%/);
             if (leftMatch && widthMatch) {
                 const barX = sidebarWidth + (parseFloat(leftMatch[1]) / 100) * chartWidth;
                 const barWidth = Math.max(18, (parseFloat(widthMatch[1]) / 100) * chartWidth);
-                const barY = currentY + (rowHeight - (row.type === 'l1' ? 22 : 18)) / 2;
-                const borderHeight = row.type === 'l1' ? 22 : 24;
+                const barY = currentY + (rowHeight - (row.type === 'l1' ? 18 : 16)) / 2;
+                const borderHeight = row.type === 'l1' ? 18 : 20;
 
                 if (row.type !== 'l1') {
                     ctx.setLineDash([4, 3]);
@@ -2258,10 +2669,48 @@ export default class DynamicGantt extends LightningElement {
                     ctx.setLineDash([]);
                 }
 
-                ctx.fillStyle = row.type === 'l1' ? '#0b5f1b' : row.item.fillClass.includes('complete') ? '#43a047' : row.item.fillClass.includes('risk') ? '#d84315' : row.item.fillClass.includes('not-started') ? '#7c8da2' : '#1e88e5';
-                const innerWidth = row.type === 'l1' ? barWidth : Math.max(10, barWidth * (parseFloat((row.item.progressStyle || 'width:100').match(/([0-9.]+)/)?.[1] || '100') / 100));
-                const innerHeight = row.type === 'l1' ? 22 : 18;
+                ctx.fillStyle = row.item.fillClass.includes('complete')
+                    ? '#43a047'
+                    : row.item.fillClass.includes('risk')
+                        ? '#d84315'
+                        : row.item.fillClass.includes('not-started')
+                            ? '#2d5a8e'
+                            : row.item.fillClass.includes('pending')
+                                ? '#1e88e5'
+                                : '#0b5f1b';
+                const innerWidth = Math.max(10, barWidth * (parseFloat((row.item.progressStyle || 'width:100').match(/([0-9.]+)/)?.[1] || '100') / 100));
+                const innerHeight = row.type === 'l1' ? 18 : 16;
                 ctx.fillRect(barX, barY, innerWidth, innerHeight);
+            }
+
+            const earlyLeftMatch = String(row.item.completedEarlyStyle || '').match(/left:([0-9.]+)%/);
+            const earlyWidthMatch = String(row.item.completedEarlyStyle || '').match(/width:([0-9.]+)%/);
+            if (earlyLeftMatch && earlyWidthMatch) {
+                const eX = sidebarWidth + (parseFloat(earlyLeftMatch[1]) / 100) * chartWidth;
+                const eW = (parseFloat(earlyWidthMatch[1]) / 100) * chartWidth;
+                ctx.beginPath();
+                ctx.moveTo(eX, currentY + rowHeight / 2);
+                ctx.lineTo(eX + eW, currentY + rowHeight / 2);
+                ctx.strokeStyle = '#43a047';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            const targetMatch = String(row.item.targetEndStyle || '').match(/left:([0-9.]+)%/);
+            if (targetMatch) {
+                const targetX = sidebarWidth + (parseFloat(targetMatch[1]) / 100) * chartWidth;
+                const targetY = currentY + rowHeight / 2;
+                ctx.save();
+                ctx.translate(targetX, targetY);
+                ctx.rotate(45 * Math.PI / 180);
+                ctx.fillStyle = '#e9f8f0';
+                ctx.strokeStyle = '#1f8f63';
+                ctx.lineWidth = 2;
+                ctx.fillRect(-6, -6, 12, 12);
+                ctx.strokeRect(-6, -6, 12, 12);
+                ctx.restore();
             }
 
             currentY += rowHeight;

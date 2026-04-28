@@ -30,8 +30,17 @@ jest.mock(
     { virtual: true }
 );
 
+jest.mock(
+    '@salesforce/apex/DynamicGanttController.updateRecordFields',
+    () => ({
+        default: jest.fn().mockResolvedValue(undefined)
+    }),
+    { virtual: true }
+);
+
 import { createElement } from '@lwc/engine-dom';
 import GanttChart from 'c/ganttChart';
+import updateRecordFields from '@salesforce/apex/DynamicGanttController.updateRecordFields';
 
 const flushPromises = () => Promise.resolve().then(() => Promise.resolve());
 
@@ -53,7 +62,7 @@ describe('c-gantt-chart', () => {
         await flushPromises();
         await flushPromises();
 
-        const fullscreenButton = element.shadowRoot.querySelector('button[title="Fullscreen"]');
+        const fullscreenButton = element.shadowRoot.querySelector('button[title="Full Screen"]');
         fullscreenButton.click();
         await flushPromises();
         const wrapper = element.shadowRoot.querySelector('.gantt-wrapper');

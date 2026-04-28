@@ -9,6 +9,7 @@
         <target>lightning__AppPage</target>
         <target>lightning__RecordPage</target>
         <target>lightning__HomePage</target>
+        <target>lightningCommunity__Page</target>
     </targets>
 
     <targetConfigs>
@@ -20,14 +21,20 @@
 
             <property name="level1Object" type="String" label="L1: Object API Name" />
             <property name="level1DisplayField" type="String" label="L1: Name Field API Name" />
-            <property name="level1PopupFields" type="String" label="L1: Detail Window Fields (Comma Separated)" />
+            <property name="level1Section1Name" type="String" label="L1: Section 1 Name" />
+            <property name="level1Section1Fields" type="String" label="L1: Section 1 Fields (Comma Separated)" />
+            <property name="level1Section2Name" type="String" label="L1: Section 2 Name" />
+            <property name="level1Section2Fields" type="String" label="L1: Section 2 Fields (Comma Separated)" />
             <property name="level1StartDate" type="String" label="L1: Start Date Field" />
             <property name="level1EndDate" type="String" label="L1: End Date Field" />
             <property name="level1Progress" type="String" label="L1: Status Field" />
 
             <property name="level2Object" type="String" label="L2 : Object API Name" />
             <property name="level2ParentLookup" type="String" label="L2 : Lookup Field to Level 1" />
-            <property name="level2PopupFields" type="String" label="L2 : Detail Window Fields" />
+            <property name="level2Section1Name" type="String" label="L2: Section 1 Name" />
+            <property name="level2Section1Fields" type="String" label="L2: Section 1 Fields (Comma Separated)" />
+            <property name="level2Section2Name" type="String" label="L2: Section 2 Name" />
+            <property name="level2Section2Fields" type="String" label="L2: Section 2 Fields (Comma Separated)" />
             <property name="level2StartDate" type="String" label="L2 : Start Date Field" />
             <property name="level2EndDate" type="String" label="L2 : End Date Field" />
             <property name="level2Progress" type="String" label="L2 : Progress Field (0-100)" />
@@ -37,7 +44,10 @@
             <property name="level3StartDate" type="String" label="L3 : Start Date Field" />
             <property name="level3EndDate" type="String" label="L3 : End Date Field" />
             <property name="level3Progress" type="String" label="L3 : Progress Field" />
-            <property name="level3PopupFields" type="String" label="L3 : Detail Window Fields" />
+            <property name="level3Section1Name" type="String" label="L3: Section 1 Name" />
+            <property name="level3Section1Fields" type="String" label="L3: Section 1 Fields (Comma Separated)" />
+            <property name="level3Section2Name" type="String" label="L3: Section 2 Name" />
+            <property name="level3Section2Fields" type="String" label="L3: Section 2 Fields (Comma Separated)" />
 
         </targetConfig>
     </targetConfigs>
