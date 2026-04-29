@@ -1,432 +1,453 @@
 <template>
-    <div class={wrapperClass} style={wrapperStyle}>
-        <div class="gantt-header">
-            <div class="header-left">
-                <h2 class="header-title">{displayTitle}</h2>
-                <template if:true={recordName}>
-                    <p class="header-subtitle">{recordName}</p>
-                </template>
-            </div>
-            <div class="header-actions">
-                <button class="btn-action" onclick={toggleExpandCollapseAll} disabled={disableHierarchyActions}>
-                    {hierarchyButtonLabel}
-                </button>
-                <div class="separator"></div>
-                <button class="btn-today" onclick={scrollToToday}>
-                    <span class="today-dot"></span>
-                    Today
-                </button>
-                <div class="separator"></div>
-                <select class="scale-select" onchange={handleScaleChange}>
-                    <template for:each={scaleSelectOptions} for:item="option">
-                        <option key={option.value} value={option.value} selected={option.selected}>{option.label}
-                        </option>
-                    </template>
-                </select>
-                <div class="separator"></div>
-                <!-- Refresh -->
-                <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" title="Refresh"
-                    onclick={reloadChart} variant="border-filled">
-                </lightning-button-icon>
-                <!-- Fullscreen toggle -->
-                <lightning-button-icon icon-name="action:download" alternative-text="Export" title="Export"
-                    onclick={exportChartAsJPG} variant="border-filled">
-                </lightning-button-icon>
-                <!-- Fullscreen toggle -->
-                <lightning-button-icon icon-name="utility:expand" alternative-text={fullscreenLabel}
-                    title={fullscreenLabel} onclick={toggleFullscreen} variant="border-filled">
-                </lightning-button-icon>
-
-
-                <!-- Undo -->
-                <lightning-button-icon icon-name="utility:undo" alternative-text="Undo" title="Undo"
-                    onclick={undoLastChange} disabled={disableUndo} variant="border-filled">
-                </lightning-button-icon>
-            </div>
-        </div>
-
-        <template if:true={errorMessage}>
-            <div class="error-banner">
-                <lightning-icon icon-name="utility:error" size="x-small" variant="error"></lightning-icon>
-                {errorMessage}
-            </div>
+  <div class={wrapperClass} style={wrapperStyle}>
+    <div class="gantt-header">
+      <div class="header-left">
+        <h2 class="header-title">{displayTitle}</h2>
+        <template if:true={recordName}>
+          <p class="header-subtitle">{recordName}</p>
         </template>
+      </div>
+      <div class="header-actions">
+        <button class="btn-action" onclick={toggleExpandCollapseAll} disabled={disableHierarchyActions}>
+          {hierarchyButtonLabel}
+        </button>
+        <div class="separator"></div>
+        <button class="btn-today" onclick={scrollToToday}>
+          <span class="today-dot"></span>
+          Today
+        </button>
+        <div class="separator"></div>
+        <select class="scale-select" onchange={handleScaleChange}>
+          <template for:each={scaleSelectOptions} for:item="option">
+            <option key={option.value} value={option.value} selected={option.selected}>
+              {option.label}
+            </option>
+          </template>
+        </select>
+        <div class="separator"></div>
+        <!-- Refresh -->
+        <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" title="Refresh"
+          onclick={reloadChart} variant="border-filled">
+        </lightning-button-icon>
+        <!-- Fullscreen toggle -->
+        <lightning-button-icon icon-name="action:download" alternative-text="Export" title="Export"
+          onclick={exportChartAsJPG} variant="border-filled">
+        </lightning-button-icon>
+        <!-- Fullscreen toggle -->
+        <lightning-button-icon icon-name="utility:expand" alternative-text={fullscreenLabel} title={fullscreenLabel}
+          onclick={toggleFullscreen} variant="border-filled">
+        </lightning-button-icon>
 
-        <div class="filter-bar">
-            <div class="filter-group filter-search-group">
-                <label class="filter-label">Search:</label>
-                <div class="search-shell">
-                    <input type="text" class="filter-search" placeholder="Find..." value={searchTerm}
-                        oninput={handleSearchInput} />
-                    <template if:true={hasSearchTerm}>
-                        <button class="btn-search-clear" onclick={handleSearchClear} title="Clear search">
-                            &times;
-                        </button>
-                    </template>
-                </div>
-                <template if:true={hasSearchTerm}>
-                    <span class="search-result-count">{searchResultInfo}</span>
-                </template>
-            </div>
-            <div class="filter-group">
-                <label class="filter-label">Status:</label>
-                <select class="filter-select" onchange={handleStatusFilterChange}>
-                    <template for:each={statusSelectOptions} for:item="option">
-                        <option key={option.value} value={option.value} selected={option.selected}>{option.label}
-                        </option>
-                    </template>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label class="filter-label">Owner:</label>
-                <select class="filter-select" onchange={handleOwnerFilterChange}>
-                    <template for:each={ownerSelectOptions} for:item="option">
-                        <option key={option.value} value={option.value} selected={option.selected}>{option.label}
-                        </option>
-                    </template>
-                </select>
-            </div>
-        </div>
-
-        <template if:true={isLoading}>
-            <div class="loading-overlay">
-                <div class="spinner"></div>
-                Loading preview...
-            </div>
-        </template>
-
-        <template if:false={isLoading}>
-            <div class="gantt-content">
-                <div class="gantt-sidebar">
-                    <div class="gantt-table-header">
-                        <div class="header-col name-col">Name</div>
-                        <div class="header-col duration-col">Duration</div>
-                        <div class="header-col owner-col">Owner</div>
-                    </div>
-                    <div class="gantt-table-body" onscroll={syncSidebarScroll}>
-                        <template if:false={hasData}>
-                            <div class="empty-state">
-                                <span class="empty-icon">[]</span>
-                                <span>No records found</span>
-                            </div>
-                        </template>
-
-                        <template for:each={level1Data} for:item="l1">
-                            <div key={l1.record.Id} class={l1.rowClass} onclick={toggleLevel1} data-id={l1.record.Id}>
-                                <div class="name-slot">
-                                    <template if:true={l1.children}>
-                                        <template if:true={supportsLevel2}>
-                                            <span class={l1.iconClass}>&#9654;</span>
-                                        </template>
-                                    </template>
-                                    <div class="record-indicator"></div>
-                                    <div class="name-cell">
-                                        <span class="l1-name-link slds-truncate" onclick={handleLevel1Click}
-                                            data-id={l1.record.Id} title={l1.record.Name}>
-                                            {l1.record.Name}
-                                        </span>
-                                    </div>
-                                </div>
-                                <span class="duration-text">{l1.duration}</span>
-                                <div class="owner-cell">
-                                    <div class="owner-avatar" style={l1.ownerAvatarStyle} title={l1.ownerName}>{l1.ownerInitials}</div>
-                                </div>
-                            </div>
-
-                            <template if:true={l1.expanded}>
-                                <template for:each={l1.children} for:item="l2">
-                                    <div key={l2.record.Id} class={l2.rowClass} onclick={handleLevel2Toggle}
-                                        data-id={l2.record.Id} data-parent={l1.record.Id}>
-                                        <div class="name-slot">
-                                            <template if:true={l2.children}>
-                                                <template if:true={supportsLevel3}>
-                                                    <span class={l2.iconClass}>&#9654;</span>
-                                                </template>
-                                            </template>
-                                            <div class="name-cell">
-                                                <span class="slds-truncate" onclick={handleItemClick} data-id={l2.record.Id}
-                                                    data-level="2" title={l2.record.Name}>
-                                                    {l2.record.Name}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <span class="duration-text">{l2.duration}</span>
-                                        <div class="owner-cell">
-                                            <div class="owner-avatar" style={l2.ownerAvatarStyle} title={l2.ownerName}>{l2.ownerInitials}</div>
-                                        </div>
-                                    </div>
-
-                                    <template if:true={l2.expanded}>
-                                        <template for:each={l2.children} for:item="l3">
-                                            <div key={l3.record.Id} class={l3.rowClass} onclick={handleItemClick}
-                                                data-id={l3.record.Id} data-level="3">
-                                                <div class="name-slot">
-                                                    <div class="name-cell">
-                                                        <span class="slds-truncate"
-                                                            title={l3.record.Name}>{l3.record.Name}</span>
-                                                    </div>
-                                                </div>
-                                                <span class="duration-text">{l3.duration}</span>
-                                                <div class="owner-cell">
-                                                    <div class="owner-avatar" style={l3.ownerAvatarStyle} title={l3.ownerName}>{l3.ownerInitials}</div>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </template>
-                                </template>
-                            </template>
-                        </template>
-                    </div>
-                    <div class="sidebar-resizer" onmousedown={handleSidebarResizeStart}></div>
-                </div>
-
-                <div class="gantt-timeline-container">
-                    <div class="timeline-header-scroll">
-                        <template for:each={timelineMonths} for:item="month">
-                            <div key={month.label} class={month.cellClass}>
-                                {month.label}
-                            </div>
-                        </template>
-                    </div>
-
-                    <div class="timeline-body-viewport" onscroll={syncScroll}>
-                        <div class="timeline-body-scroll" style={timelineBodyStyle}>
-                            <div class="today-line" style={todayLineStyle}>
-                                <span class="today-line-label">{todayLabel}</span>
-                            </div>
-                            <div class="project-end-line"></div>
-
-                            <template for:each={level1Data} for:item="l1">
-                                <div key={l1.record.Id} class="timeline-row-parent">
-                                    <div class="gantt-bar-plan" style={l1.plannedBarStyle} data-element="planned-bar">
-                                    </div>
-                                    <template if:true={l1.completedEarlyStyle}>
-                                        <div class="gantt-bar-early-dotted" style={l1.completedEarlyStyle}></div>
-                                    </template>
-                                    <div class={l1.barClass} style={l1.barStyle} data-element="actual-bar"
-                                        onmousedown={handleBarDragStart} onclick={handleLevel1Click}
-                                        onmouseenter={handleBarHover} onmousemove={handleBarMove}
-                                        onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
-                                        <div class="drag-handle drag-handle-left"></div>
-                                        <div class={l1.fillClass} style={l1.progressStyle} data-element="progress-fill"></div>
-                                        <span class={l1.statusLabelClass}>{l1.progressLabel}</span>
-                                        <div class="drag-handle drag-handle-right"></div>
-                                    </div>
-                                    <div class="target-end-pin" style={l1.targetEndStyle}
-                                        onmouseenter={handleTargetHover} onmouseover={handleTargetHover}
-                                        onmousemove={handleTargetMove} onmouseleave={hideTooltip}
-                                        onmouseout={hideTooltip} data-id={l1.record.Id} data-level="1">
-                                    </div>
-                                </div>
-
-                                <template if:true={l1.expanded}>
-                                    <template for:each={l1.children} for:item="l2">
-                                        <div key={l2.record.Id} class="timeline-row-child">
-                                            <div class="gantt-bar-plan" style={l2.plannedBarStyle}
-                                                data-element="planned-bar"></div>
-                                            <template if:true={l2.completedEarlyStyle}>
-                                                <div class="gantt-bar-early-dotted" style={l2.completedEarlyStyle}>
-                                                </div>
-                                            </template>
-                                            <div class={l2.barClass} style={l2.barStyle}
-                                                onmousedown={handleBarDragStart} onclick={handleItemClick}
-                                                onmouseenter={handleBarHover} onmousemove={handleBarMove}
-                                                onmouseleave={hideTooltip} data-id={l2.record.Id} data-level="2">
-                                                <div class="drag-handle drag-handle-left"></div>
-                                                <div class={l2.fillClass} style={l2.progressStyle} data-element="progress-fill"></div>
-                                                <span class={l2.statusLabelClass}>{l2.progressLabel}</span>
-                                                <div class="drag-handle drag-handle-right"></div>
-                                            </div>
-                                            <div class="target-end-pin" style={l2.targetEndStyle}
-                                                onmouseenter={handleTargetHover} onmouseover={handleTargetHover}
-                                                onmousemove={handleTargetMove} onmouseleave={hideTooltip}
-                                                onmouseout={hideTooltip} data-id={l2.record.Id} data-level="2">
-                                            </div>
-                                        </div>
-
-                                        <template if:true={l2.expanded}>
-                                            <template for:each={l2.children} for:item="l3">
-                                                <div key={l3.record.Id} class="timeline-row-l3">
-                                                    <div class="gantt-bar-plan" style={l3.plannedBarStyle}
-                                                        data-element="planned-bar"></div>
-                                                    <template if:true={l3.completedEarlyStyle}>
-                                                        <div class="gantt-bar-early-dotted"
-                                                            style={l3.completedEarlyStyle}></div>
-                                                    </template>
-                                                    <div class={l3.barClass} style={l3.barStyle}
-                                                        onmousedown={handleBarDragStart} onclick={handleItemClick}
-                                                        onmouseenter={handleBarHover} onmousemove={handleBarMove}
-                                                        onmouseleave={hideTooltip} data-id={l3.record.Id}
-                                                        data-level="3">
-                                                        <div class="drag-handle drag-handle-left"></div>
-                                                        <div class={l3.fillClass} style={l3.progressStyle} data-element="progress-fill"></div>
-                                                        <span class={l3.statusLabelClass}>{l3.progressLabel}</span>
-                                                        <div class="drag-handle drag-handle-right"></div>
-                                                    </div>
-                                                    <div class="target-end-pin" style={l3.targetEndStyle}
-                                                        onmouseenter={handleTargetHover} onmouseover={handleTargetHover}
-                                                        onmousemove={handleTargetMove} onmouseleave={hideTooltip}
-                                                        onmouseout={hideTooltip} data-id={l3.record.Id} data-level="3">
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </template>
-                                    </template>
-                                </template>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </template>
-
-        <template if:true={tooltipVisible}>
-            <div class="bar-tooltip" style={tooltipStyle}>
-                <div class="tooltip-title">{tooltipTitle}</div>
-                <template for:each={tooltipDetails} for:item="detail">
-                    <div key={detail.key} class="tooltip-row">
-                        <span class="tooltip-label">{detail.label}</span>
-                        <span class="tooltip-value">{detail.value}</span>
-                    </div>
-                </template>
-            </div>
-        </template>
-
-        <template if:true={dragConfirm.visible}>
-            <div class="dc-backdrop" onclick={cancelDragConfirm}>
-                <div class="dc-box" onclick={stopPropagation}>
-                    <div class="dc-header">
-                        <lightning-icon icon-name="action:new_event" size="small" class="custom-icon"></lightning-icon>
-                        <span class="dc-title">Confirm Date Change</span>
-                    </div>
-                    <p class="dc-record"><strong>{dragConfirm.itemLabel}</strong></p>
-                    <div class="dc-changes">
-                        <template for:each={dragConfirm.changes} for:item="change">
-                            <div key={change.key} class="dc-change-row">
-                                <span class="dc-field">{change.label}</span>
-                                <span class="dc-before">{change.before}</span>
-                                <span class="dc-arrow">&#8594;</span>
-                                <span class="dc-after">{change.after}</span>
-                            </div>
-                        </template>
-                    </div>
-                    <p class="dc-note">{dragConfirm.description}</p>
-                    <div class="dc-actions">
-                        <button class="dc-btn-cancel" onclick={cancelDragConfirm}>Cancel</button>
-                        <button class="dc-btn-save" onclick={confirmDragShift}>Save Changes</button>
-                    </div>
-                </div>
-            </div>
-        </template>
-
-        <template if:true={tooltipDragVisible}>
-            <div class="drag-live-tooltip" style={dragTooltip.style}>
-                <span class="dlt-label">{dragTooltip.label}</span>
-                <span class="dlt-date">{dragTooltip.dateStr}</span>
-            </div>
-        </template>
-
-        <template if:true={selectedRecordId}>
-            <div class="modal-backdrop" onclick={handleBackdropClick}>
-                <div class="modal-box" onclick={stopPropagation}>
-                    <div class="modal-header">
-                        <div class="modal-title-wrap">
-                            <span class="modal-title">{modalTitle}</span>
-                        </div>
-                        <div class="modal-header-actions">
-                            <lightning-button-icon icon-name="utility:edit" alternative-text="Edit" title="Edit"
-                                onclick={openEditRecord} disabled={disableEditButton}>
-                            </lightning-button-icon>
-                            <button class="modal-close-btn" onclick={closeModal} title="Close">&times;</button>
-                        </div>
-                    </div>
-                    <div class="modal-body">
-                        <template if:false={isEditMode}>
-                            <div class="modal-summary-grid">
-                                <template for:each={selectedRecordSummary} for:item="detail">
-                                    <div key={detail.key} class="modal-summary-item">
-                                        <span class="modal-summary-label">{detail.label}</span>
-                                        <template if:true={detail.isOwner}>
-                                            <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.25rem;">
-                                                <div class="owner-avatar popup-avatar" style={detail.ownerColor}>
-                                                    {detail.ownerInitials}
-                                                </div>
-                                                <span class="modal-summary-value">{detail.value}</span>
-                                            </div>
-                                        </template>
-                                        <template if:false={detail.isOwner}>
-                                            <span class="modal-summary-value">{detail.value}</span>
-                                        </template>
-                                    </div>
-                                </template>
-                            </div>
-                            <lightning-record-view-form record-id={selectedRecordId} object-api-name={selectedObjectApi}>
-                                <template if:true={hasSection1}>
-                                    <div class="modal-section-header">
-                                        <h3 class="modal-section-title">{section1.name}</h3>
-                                    </div>
-                                    <div class="modal-fields-grid">
-                                        <template for:each={section1.fields} for:item="fld">
-                                            <div key={fld} class="modal-field-item">
-                                                <lightning-output-field field-name={fld}></lightning-output-field>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template if:true={hasSection2}>
-                                    <div class="modal-section-header">
-                                        <h3 class="modal-section-title">{section2.name}</h3>
-                                    </div>
-                                    <div class="modal-fields-grid">
-                                        <template for:each={section2.fields} for:item="fld">
-                                            <div key={fld} class="modal-field-item">
-                                                <lightning-output-field field-name={fld}></lightning-output-field>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                            </lightning-record-view-form>
-                        </template>
-                        <template if:true={isEditMode}>
-                            <lightning-record-edit-form class="modal-edit-form" record-id={selectedRecordId}
-                                object-api-name={selectedObjectApi} onsubmit={handleInlineEditSubmit}
-                                onsuccess={handleInlineEditSuccess} onerror={handleInlineEditError}>
-                                <template if:true={hasSection1}>
-                                    <div class="modal-section-header">
-                                        <h3 class="modal-section-title">{section1.name}</h3>
-                                    </div>
-                                    <div class="modal-fields-grid">
-                                        <template for:each={section1.fields} for:item="fld">
-                                            <div key={fld} class="modal-field-item">
-                                                <lightning-input-field field-name={fld}></lightning-input-field>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template if:true={hasSection2}>
-                                    <div class="modal-section-header">
-                                        <h3 class="modal-section-title">{section2.name}</h3>
-                                    </div>
-                                    <div class="modal-fields-grid">
-                                        <template for:each={section2.fields} for:item="fld">
-                                            <div key={fld} class="modal-field-item">
-                                                <lightning-input-field field-name={fld}></lightning-input-field>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                            </lightning-record-edit-form>
-                        </template>
-                    </div>
-                    <template if:true={isEditMode}>
-                        <div class="modal-actions">
-                            <button class="btn-action" onclick={undoInlineEdit}>Undo</button>
-                            <button class="btn-action" onclick={cancelInlineEdit}>Cancel</button>
-                            <button class="btn-action btn-primary" onclick={saveInlineEdit}>Save</button>
-                        </div>
-                    </template>
-                </div>
-            </div>
-        </template>
+        <!-- Undo -->
+        <lightning-button-icon icon-name="utility:undo" alternative-text="Undo" title="Undo" onclick={undoLastChange}
+          disabled={disableUndo} variant="border-filled">
+        </lightning-button-icon>
+      </div>
     </div>
+
+    <template if:true={errorMessage}>
+      <div class="error-banner">
+        <lightning-icon icon-name="utility:error" size="x-small" variant="error"></lightning-icon>
+        {errorMessage}
+      </div>
+    </template>
+
+    <div class="filter-bar">
+      <div class="filter-group filter-search-group">
+        <label class="filter-label">Search:</label>
+        <div class="search-shell">
+          <input type="text" class="filter-search" placeholder="Find..." value={searchTerm}
+            oninput={handleSearchInput} />
+          <template if:true={hasSearchTerm}>
+            <button class="btn-search-clear" onmousedown={handleSearchClear} title="Clear search">
+              &times;
+            </button>
+          </template>
+        </div>
+        <template if:true={hasSearchTerm}>
+          <span class="search-result-count">{searchResultInfo}</span>
+        </template>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Status:</label>
+        <select class="filter-select" onchange={handleStatusFilterChange}>
+          <template for:each={statusSelectOptions} for:item="option">
+            <option key={option.value} value={option.value} selected={option.selected}>
+              {option.label}
+            </option>
+          </template>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Owner:</label>
+        <select class="filter-select" onchange={handleOwnerFilterChange}>
+          <template for:each={ownerSelectOptions} for:item="option">
+            <option key={option.value} value={option.value} selected={option.selected}>
+              {option.label}
+            </option>
+          </template>
+        </select>
+      </div>
+    </div>
+
+    <template if:true={isLoading}>
+      <div class="loading-overlay">
+        <div class="spinner"></div>
+        Loading preview...
+      </div>
+    </template>
+
+    <template if:false={isLoading}>
+      <div class="gantt-content">
+        <div class="gantt-sidebar">
+          <div class="gantt-table-header">
+            <div class="header-col name-col">Name</div>
+            <div class="header-col duration-col">Duration</div>
+            <div class="header-col owner-col">Owner</div>
+          </div>
+          <div class="gantt-table-body" onscroll={syncSidebarScroll}>
+            <template if:false={hasData}>
+              <div class="empty-state">
+                <span class="empty-icon">[]</span>
+                <span>No records found</span>
+              </div>
+            </template>
+
+            <template for:each={level1Data} for:item="l1">
+              <div key={l1.record.Id} class={l1.rowClass} onclick={toggleLevel1} data-id={l1.record.Id}>
+                <div class="name-slot">
+                  <template if:true={l1.children}>
+                    <template if:true={supportsLevel2}>
+                      <span class="row-bullet">&#9679;</span>
+                    </template>
+                  </template>
+
+                  <div class="name-cell">
+                    <span class="l1-name-link slds-truncate" onclick={handleLevel1Click} data-id={l1.record.Id}
+                      title={l1.record.Name}>
+                      {l1.record.Name}
+                    </span>
+                  </div>
+                </div>
+                <span class="duration-text">{l1.duration}</span>
+                <div class="owner-cell">
+                  <div class="owner-avatar" style={l1.ownerAvatarStyle} title={l1.ownerName}>
+                    {l1.ownerInitials}
+                  </div>
+                </div>
+              </div>
+
+              <template if:true={l1.expanded}>
+                <template for:each={l1.children} for:item="l2">
+                  <div key={l2.record.Id} class={l2.rowClass} onclick={handleLevel2Toggle} data-id={l2.record.Id}
+                    data-parent={l1.record.Id}>
+                    <div class="name-slot">
+                      <template if:true={l2.children}>
+                        <template if:true={supportsLevel3}>
+                          <span class="row-bullet">&#9679;</span>
+                        </template>
+                      </template>
+                <div class="name-cell">
+                  <span class="slds-truncate" onclick={handleItemClick} data-id={l2.record.Id} data-level="2"
+                    title={l2.record.Name}>
+                    {l2.record.Name}
+                  </span>
+                </div>
+          </div>
+          <span class="duration-text">{l2.duration}</span>
+          <div class="owner-cell">
+            <div class="owner-avatar" style={l2.ownerAvatarStyle} title={l2.ownerName}>
+              {l2.ownerInitials}
+            </div>
+          </div>
+        </div>
+
+        <template if:true={l2.expanded}>
+          <template for:each={l2.children} for:item="l3">
+            <div key={l3.record.Id} class={l3.rowClass} onclick={handleItemClick} data-id={l3.record.Id} data-level="3">
+              <div class="name-slot">
+                <div class="name-cell">
+                  <span class="slds-truncate" title={l3.record.Name}>{l3.record.Name}</span>
+                </div>
+              </div>
+              <span class="duration-text">{l3.duration}</span>
+              <div class="owner-cell">
+                <div class="owner-avatar" style={l3.ownerAvatarStyle} title={l3.ownerName}>
+                  {l3.ownerInitials}
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+    </template>
+</template>
+</template>
+</div>
+<div class="sidebar-resizer" onmousedown={handleSidebarResizeStart}></div>
+</div>
+
+<div class="gantt-timeline-container">
+  <div class="timeline-header-scroll">
+    <template for:each={timelineMonths} for:item="month">
+      <div key={month.label} class={month.cellClass}>{month.label}</div>
+    </template>
+  </div>
+
+  <div class="timeline-body-viewport" onscroll={syncScroll}>
+    <div class="timeline-body-scroll" style={timelineBodyStyle}>
+      <div class="today-line" style={todayLineStyle}>
+        <span class="today-line-label">{todayLabel}</span>
+      </div>
+      <div class="project-end-line"></div>
+
+      <template for:each={level1Data} for:item="l1">
+        <div key={l1.record.Id} class="timeline-row-parent">
+          <div class="gantt-bar-plan" style={l1.plannedBarStyle} data-element="planned-bar"></div>
+          <template if:true={l1.completedEarlyStyle}>
+            <div class="gantt-bar-early-dotted" style={l1.completedEarlyStyle}></div>
+          </template>
+          <div class={l1.barClass} style={l1.barStyle} data-element="actual-bar" onmousedown={handleBarDragStart}
+            onclick={handleLevel1Click} onmouseenter={handleBarHover} onmousemove={handleBarMove}
+            onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
+            <div class="drag-handle drag-handle-left"></div>
+            <div class={l1.fillClass} style={l1.progressStyle} data-element="progress-fill"></div>
+            <span class={l1.statusLabelClass}>{l1.progressLabel}</span>
+            <div class="drag-handle drag-handle-right"></div>
+          </div>
+          <div class="target-end-pin" style={l1.targetEndStyle} onmouseenter={handleTargetHover}
+            onmouseover={handleTargetHover} onmousemove={handleTargetMove} onmouseleave={hideTooltip}
+            onmouseout={hideTooltip} data-id={l1.record.Id} data-level="1"></div>
+        </div>
+
+        <template if:true={l1.expanded}>
+          <template for:each={l1.children} for:item="l2">
+            <div key={l2.record.Id} class="timeline-row-child">
+              <div class="gantt-bar-plan" style={l2.plannedBarStyle} data-element="planned-bar"></div>
+              <template if:true={l2.completedEarlyStyle}>
+                <div class="gantt-bar-early-dotted" style={l2.completedEarlyStyle}></div>
+              </template>
+              <div class={l2.barClass} style={l2.barStyle} onmousedown={handleBarDragStart} onclick={handleItemClick}
+                onmouseenter={handleBarHover} onmousemove={handleBarMove} onmouseleave={hideTooltip}
+                data-id={l2.record.Id} data-level="2">
+                <div class="drag-handle drag-handle-left"></div>
+                <div class={l2.fillClass} style={l2.progressStyle} data-element="progress-fill"></div>
+                <span class={l2.statusLabelClass}>{l2.progressLabel}</span>
+                <div class="drag-handle drag-handle-right"></div>
+              </div>
+              <div class="target-end-pin" style={l2.targetEndStyle} onmouseenter={handleTargetHover}
+                onmouseover={handleTargetHover} onmousemove={handleTargetMove} onmouseleave={hideTooltip}
+                onmouseout={hideTooltip} data-id={l2.record.Id} data-level="2"></div>
+            </div>
+
+            <template if:true={l2.expanded}>
+              <template for:each={l2.children} for:item="l3">
+                <div key={l3.record.Id} class="timeline-row-l3">
+                  <div class="gantt-bar-plan" style={l3.plannedBarStyle} data-element="planned-bar"></div>
+                  <template if:true={l3.completedEarlyStyle}>
+                    <div class="gantt-bar-early-dotted" style={l3.completedEarlyStyle}></div>
+                  </template>
+                  <div class={l3.barClass} style={l3.barStyle} onmousedown={handleBarDragStart}
+                    onclick={handleItemClick} onmouseenter={handleBarHover} onmousemove={handleBarMove}
+                    onmouseleave={hideTooltip} data-id={l3.record.Id} data-level="3">
+                    <div class="drag-handle drag-handle-left"></div>
+                    <div class={l3.fillClass} style={l3.progressStyle} data-element="progress-fill"></div>
+                    <span class={l3.statusLabelClass}>{l3.progressLabel}</span>
+                    <div class="drag-handle drag-handle-right"></div>
+                  </div>
+                  <div class="target-end-pin" style={l3.targetEndStyle} onmouseenter={handleTargetHover}
+                    onmouseover={handleTargetHover} onmousemove={handleTargetMove} onmouseleave={hideTooltip}
+                    onmouseout={hideTooltip} data-id={l3.record.Id} data-level="3"></div>
+                </div>
+              </template>
+            </template>
+          </template>
+        </template>
+      </template>
+    </div>
+  </div>
+</div>
+</div>
+</template>
+
+<template if:true={tooltipVisible}>
+  <div class="bar-tooltip" style={tooltipStyle}>
+    <div class="tooltip-title">{tooltipTitle}</div>
+    <template for:each={tooltipDetails} for:item="detail">
+      <div key={detail.key} class="tooltip-row">
+        <span class="tooltip-label">{detail.label}</span>
+        <span class="tooltip-value">{detail.value}</span>
+      </div>
+    </template>
+  </div>
+</template>
+
+<template if:true={dragConfirm.visible}>
+  <div class="dc-backdrop" onclick={cancelDragConfirm}>
+    <div class="dc-box" onclick={stopPropagation}>
+      <div class="dc-header">
+        <lightning-icon icon-name="action:new_event" size="small" class="custom-icon"></lightning-icon>
+        <span class="dc-title">Confirm Date Change</span>
+      </div>
+      <p class="dc-record"><strong>{dragConfirm.itemLabel}</strong></p>
+      <div class="dc-changes">
+        <template for:each={dragConfirm.changes} for:item="change">
+          <div key={change.key} class="dc-change-row">
+            <span class="dc-field">{change.label}</span>
+            <span class="dc-before">{change.before}</span>
+            <span class="dc-arrow">&#8594;</span>
+            <span class="dc-after">{change.after}</span>
+          </div>
+        </template>
+      </div>
+      <p class="dc-note">{dragConfirm.description}</p>
+      <div class="dc-actions">
+        <button class="dc-btn-cancel" onclick={cancelDragConfirm}>
+          Cancel
+        </button>
+        <button class="dc-btn-save" onclick={confirmDragShift}>
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template if:true={tooltipDragVisible}>
+  <div class="drag-live-tooltip" style={dragTooltip.style}>
+    <span class="dlt-label">{dragTooltip.label}</span>
+    <span class="dlt-date">{dragTooltip.dateStr}</span>
+  </div>
+</template>
+
+<template if:true={selectedRecordId}>
+  <div class="modal-backdrop" onclick={handleBackdropClick}>
+    <div class="modal-box" onclick={stopPropagation}>
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-title">{modalTitle}</span>
+        </div>
+        <div class="modal-header-actions">
+          <lightning-button-icon icon-name="utility:edit" alternative-text="Edit" title="Edit" onclick={openEditRecord}
+            disabled={disableEditButton}>
+          </lightning-button-icon>
+          <button class="modal-close-btn" onclick={closeModal} title="Close">
+            &times;
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <template if:false={isEditMode}>
+          <div class="modal-summary-grid">
+            <template for:each={selectedRecordSummary} for:item="detail">
+              <div key={detail.key} class="modal-summary-item">
+                <span class="modal-summary-label">{detail.label}</span>
+                <template if:true={detail.isOwner}>
+                  <div style="
+                          display: flex;
+                          align-items: center;
+                          gap: 0.5rem;
+                          margin-top: 0.25rem;
+                        ">
+                    <div class="owner-avatar popup-avatar" style={detail.ownerColor}>
+                      {detail.ownerInitials}
+                    </div>
+                    <span class="modal-summary-value" style={detail.valueStyle}>{detail.value}</span>
+                  </div>
+                </template>
+                <template if:false={detail.isOwner}>
+                  <span class="modal-summary-value" style={detail.valueStyle}>{detail.value}</span>
+                </template>
+              </div>
+            </template>
+          </div>
+          <lightning-record-view-form record-id={selectedRecordId} object-api-name={selectedObjectApi}>
+            <template if:true={hasSection1}>
+              <div class="modal-section-header">
+                <h3 class="modal-section-title">{section1.name}</h3>
+              </div>
+              <div class="modal-fields-grid">
+                <template for:each={section1.fields} for:item="fld">
+                  <div key={fld} class="modal-field-item">
+                    <lightning-output-field field-name={fld}></lightning-output-field>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template if:true={hasSection2}>
+              <div class="modal-section-header">
+                <h3 class="modal-section-title">{section2.name}</h3>
+              </div>
+              <div class="modal-fields-grid">
+                <template for:each={section2.fields} for:item="fld">
+                  <div key={fld} class="modal-field-item">
+                    <lightning-output-field field-name={fld}></lightning-output-field>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </lightning-record-view-form>
+        </template>
+        <template if:true={isEditMode}>
+          <lightning-record-edit-form class="modal-edit-form" record-id={selectedRecordId}
+            object-api-name={selectedObjectApi} onsubmit={handleInlineEditSubmit} onsuccess={handleInlineEditSuccess}
+            onerror={handleInlineEditError}>
+            <div class="modal-fields-grid">
+              <div class="modal-field-item">
+                <lightning-input-field field-name="Name"></lightning-input-field>
+              </div>
+              <div class="modal-field-item">
+                <lightning-input-field field-name="OwnerId"></lightning-input-field>
+              </div>
+              <div class="modal-field-item">
+                <lightning-input-field field-name={actualStartField}></lightning-input-field>
+              </div>
+              <div class="modal-field-item">
+                <lightning-input-field field-name={actualEndField}></lightning-input-field>
+              </div>
+              <div class="modal-field-item">
+                <lightning-input-field field-name={statusFieldName}></lightning-input-field>
+              </div>
+            </div>
+
+            <template if:true={hasSection1}>
+              <div class="modal-section-header">
+                <h3 class="modal-section-title">{section1.name}</h3>
+              </div>
+              <div class="modal-fields-grid">
+                <template for:each={section1.fields} for:item="fld">
+                  <div key={fld} class="modal-field-item">
+                    <lightning-input-field field-name={fld}></lightning-input-field>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template if:true={hasSection2}>
+              <div class="modal-section-header">
+                <h3 class="modal-section-title">{section2.name}</h3>
+              </div>
+              <div class="modal-fields-grid">
+                <template for:each={section2.fields} for:item="fld">
+                  <div key={fld} class="modal-field-item">
+                    <lightning-input-field field-name={fld}></lightning-input-field>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </lightning-record-edit-form>
+        </template>
+      </div>
+      <template if:true={isEditMode}>
+        <div class="modal-actions">
+          <button class="btn-action" onclick={cancelInlineEdit}>
+            Cancel
+          </button>
+          <button class="btn-action btn-primary" onclick={saveInlineEdit}>
+            Save
+          </button>
+        </div>
+      </template>
+    </div>
+  </div>
+</template>
+</div>
 </template>
