@@ -92,6 +92,7 @@ export default class DynamicGantt extends LightningElement {
   @track ownerChoices = [];
   @track statusChoices = [];
   @track tooltip = { visible: false, title: "", details: [], style: "" };
+  @track selectedItemCache = null;
 
   startDateLimit;
   endDateLimit;
@@ -203,51 +204,8 @@ export default class DynamicGantt extends LightningElement {
   }
 
   get selectedRecordSummary() {
-    if (!this.selectedRecordId) {
-      return [];
-    }
-    const item = this._findItem(this.selectedRecordId, this.selectedLevel);
-    if (!item) {
-      return [];
-    }
-    const record = item.record || {};
-    return [
-      { key: "name", label: "Name", value: record.Name || "N/A" },
-      {
-        key: "owner",
-        label: "Owner",
-        value: item.ownerName || record.Owner?.Name || "N/A",
-        isOwner: true,
-        ownerInitials: item.ownerInitials,
-        ownerColor: `background-color: ${item.ownerColor}; color: #ffffff;`
-      },
-      {
-        key: "status",
-        label: "Status",
-        value:
-          this._getStatusValue(
-            record,
-            this._getStatusField(this.selectedLevel)
-          ) || "N/A",
-        valueStyle: this._getStatusColor(
-          this._getStatusValue(record, this._getStatusField(this.selectedLevel))
-        )
-      },
-      {
-        key: "start",
-        label: "Start",
-        value: this._formatDate(
-          this._getItemStartDate(item, this.selectedLevel)
-        )
-      },
-      {
-        key: "end",
-        label: "End",
-        value: this._formatDate(this._getItemEndDate(item, this.selectedLevel))
-      },
-      { key: "duration", label: "Duration", value: item.duration || "N/A" }
-    ];
-  }
+  return this.selectedItemCache?.summary || [];
+}
 
   get tooltipVisible() {
     return this.tooltip.visible;
@@ -613,7 +571,7 @@ export default class DynamicGantt extends LightningElement {
       });
   }
 
-  initTimeline() {
+  initTimeline(preserveScroll = false) {
     const today = this._getCurrentDate();
     const start = this._getTimelineStart(today);
     const horizon = this._getTimelineHorizonDate();
@@ -642,6 +600,9 @@ export default class DynamicGantt extends LightningElement {
 
     this.endDateLimit = timelineEndDate;
     this._refreshBarsForCurrentScale();
+if (!preserveScroll) {
+  setTimeout(() => this.scrollToToday(), 0);
+}
   }
 
   loadLevel1() {
@@ -669,38 +630,54 @@ export default class DynamicGantt extends LightningElement {
       .join(",");
 
     getGanttData({
-      objectName: this.level1Object,
-      fields,
-      lookupField: "",
-      parentId: "",
-      statusField: this.level1Progress || "",
-      startDateField: this.level1StartDate || "",
-      searchTerm: "",
-      specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
-    })
-      .then((result) => {
-        this.sourceLevel1Data = (result || []).map((item) =>
-          this._wrapL1(item)
-        );
-        this._refreshView();
+  objectName: this.level1Object,
+  fields,
+  lookupField: "",
+  parentId: "",
+  statusField: this.level1Progress || "",
+  startDateField: this.level1StartDate || "",
+  searchTerm: "",
+  specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
+})
+  .then((result) => {
+    this.sourceLevel1Data = (result || [])
+      .map((item) => this._wrapL1(item))
+      .sort((a, b) => {
+        const aStart =
+          this._getActualStartDate(a.record, 1) ||
+          this._getPlannedStartDate(a.record, 1);
+        const bStart =
+          this._getActualStartDate(b.record, 1) ||
+          this._getPlannedStartDate(b.record, 1);
 
-        if (
-          this.supportsLevel2 &&
-          this.sourceLevel1Data.length &&
-          this._validateL2Config()
-        ) {
-          this.expandAll();
-        } else {
-          this.initTimeline();
-          this.isLoading = false;
-        }
-      })
-      .catch((error) => {
-        this.errorMessage = `Error loading Level 1: ${this._msg(error)}`;
-        this.isLoading = false;
+        // Records with no date go to the bottom
+        if (!aStart && !bStart) return 0;
+        if (!aStart) return 1;
+        if (!bStart) return -1;
+
+        return aStart.getTime() - bStart.getTime();
       });
-  }
 
+    this._refreshView();
+
+    if (
+      this.supportsLevel2 &&
+      this.sourceLevel1Data.length &&
+      this._validateL2Config()
+    ) {
+      this.expandAll();
+      setTimeout(() => this.scrollToToday(), 0);
+    } else {
+      this.initTimeline();
+      this.isLoading = false;
+      setTimeout(() => this.scrollToToday(), 0);
+    }
+  })
+  .catch((error) => {
+    this.errorMessage = `Error loading Level 1: ${this._msg(error)}`;
+    this.isLoading = false;
+  });
+}
   _loadLevel2(parentId) {
     const fields = [
       this.level2SidebarFields,
@@ -1095,52 +1072,55 @@ export default class DynamicGantt extends LightningElement {
     this.sourceLevel1Data = updated;
   }
 
-  handleLevel1Click(event) {
-    if (this.suppressBarClick) {
-      this.suppressBarClick = false;
-      return;
-    }
-    event.stopPropagation();
-    this.selectedRecordId = event.currentTarget.dataset.id;
-    this.selectedObjectApi = this.level1Object;
-    this.selectedLevel = 1;
-    this.section1 = {
-      name: this.level1Section1Name,
-      fields: this._parseFields(this.level1Section1Fields)
-    };
-    this.section2 = {
-      name: this.level1Section2Name,
-      fields: this._parseFields(this.level1Section2Fields)
-    };
-    this.isEditMode = false;
+  // REPLACE handleLevel1Click with:
+handleLevel1Click(event) {
+  if (this.suppressBarClick) {
+    this.suppressBarClick = false;
+    return;
   }
+  event.stopPropagation();
+  const id = event.currentTarget.dataset.id;
+  this.selectedRecordId = id;
+  this.selectedObjectApi = this.level1Object;
+  this.selectedLevel = 1;
+  const sec1Fields = this._parseFields(this.level1Section1Fields);
+  const sec2Fields = this._parseFields(this.level1Section2Fields);
+  this.section1 = { name: this.level1Section1Name, fields: sec1Fields };
+  this.section2 = { name: this.level1Section2Name, fields: sec2Fields };
+  this.isEditMode = false;
+  this.selectedItemCache = this._buildSelectedItemCache(
+    id, 1, this.level1Object,
+    this.level1Section1Name, sec1Fields,
+    this.level1Section2Name, sec2Fields
+  );
+}
 
-  handleItemClick(event) {
-    if (this.suppressBarClick) {
-      this.suppressBarClick = false;
-      return;
-    }
-    event.stopPropagation();
-    const id = event.currentTarget.dataset.id;
-    const level = parseInt(event.currentTarget.dataset.level, 10);
-    this.selectedRecordId = id;
-    this.selectedLevel = level;
-    this.selectedObjectApi =
-      level === 3 ? this.level3Object : this.level2Object;
-    this.section1 = {
-      name: level === 3 ? this.level3Section1Name : this.level2Section1Name,
-      fields: this._parseFields(
-        level === 3 ? this.level3Section1Fields : this.level2Section1Fields
-      )
-    };
-    this.section2 = {
-      name: level === 3 ? this.level3Section2Name : this.level2Section2Name,
-      fields: this._parseFields(
-        level === 3 ? this.level3Section2Fields : this.level2Section2Fields
-      )
-    };
-    this.isEditMode = false;
+  // REPLACE handleItemClick with:
+handleItemClick(event) {
+  if (this.suppressBarClick) {
+    this.suppressBarClick = false;
+    return;
   }
+  event.stopPropagation();
+  const id = event.currentTarget.dataset.id;
+  const level = parseInt(event.currentTarget.dataset.level, 10);
+  const objectApi = level === 3 ? this.level3Object : this.level2Object;
+  const sec1Name = level === 3 ? this.level3Section1Name : this.level2Section1Name;
+  const sec2Name = level === 3 ? this.level3Section2Name : this.level2Section2Name;
+  const sec1Fields = this._parseFields(level === 3 ? this.level3Section1Fields : this.level2Section1Fields);
+  const sec2Fields = this._parseFields(level === 3 ? this.level3Section2Fields : this.level2Section2Fields);
+  this.selectedRecordId = id;
+  this.selectedLevel = level;
+  this.selectedObjectApi = objectApi;
+  this.section1 = { name: sec1Name, fields: sec1Fields };
+  this.section2 = { name: sec2Name, fields: sec2Fields };
+  this.isEditMode = false;
+  this.selectedItemCache = this._buildSelectedItemCache(
+    id, level, objectApi,
+    sec1Name, sec1Fields,
+    sec2Name, sec2Fields
+  );
+}
 
   handleBarDragStart(event) {
     if (event.button !== 0 || this.isSavingChange) {
@@ -1487,7 +1467,7 @@ export default class DynamicGantt extends LightningElement {
       .then(() => {
         this.changeHistory = this.changeHistory.slice(0, -1);
         // Reload chart data to reflect the undo changes
-        this._reloadChartData();
+        this._reloadChartData(true);
       })
       .catch((error) => {
         this.errorMessage = `Undo failed: ${this._msg(error)}`;
@@ -1498,12 +1478,12 @@ export default class DynamicGantt extends LightningElement {
   }
 
   closeModal() {
-    this.selectedRecordId = null;
-    this.isEditMode = false;
-    this.inlineEditBaseline = null;
-    this.inlineEditPendingValues = null;
-  }
-
+  this.selectedRecordId = null;
+  this.isEditMode = false;
+  this.inlineEditBaseline = null;
+  this.inlineEditPendingValues = null;
+  this.selectedItemCache = null;   // <-- ADD THIS LINE
+}
   handleBackdropClick() {
     this.closeModal();
   }
@@ -1692,12 +1672,16 @@ handleSearchClear(event) {
     this.statusFilter = event.detail?.value || event.target?.value || "all";
     this._refreshView();
     this.initTimeline();
+    // eslint-disable-next-line @lwc/lwc/no-async-operation
+    setTimeout(() => this.scrollToToday(), 50);
   }
 
   handleOwnerFilterChange(event) {
     this.ownerFilter = event.detail?.value || event.target?.value || "all";
     this._refreshView();
     this.initTimeline();
+    // eslint-disable-next-line @lwc/lwc/no-async-operation
+    setTimeout(() => this.scrollToToday(), 50);
   }
 
   toggleExpandCollapseAll() {
@@ -1874,8 +1858,9 @@ handleSearchClear(event) {
   handleScaleChange(event) {
     this.timelineScale = event.detail?.value || event.target?.value || "months";
     this.initTimeline();
+    // eslint-disable-next-line @lwc/lwc/no-async-operation
+    setTimeout(() => this.scrollToToday(), 50);
   }
-
   parseDate(value) {
     if (!value) return null;
     if (value instanceof Date) {
@@ -2308,7 +2293,7 @@ handleSearchClear(event) {
 
         // After Apex update succeeds, reload the chart data from Salesforce
         // This ensures we get fresh records with the updated field values
-        this._reloadChartData();
+        this._reloadChartData(true);
 
         // Close modal after successful drag
         this.selectedRecordId = null;
@@ -2323,7 +2308,7 @@ handleSearchClear(event) {
       });
   }
 
-  _reloadChartData() {
+  _reloadChartData(preserveScroll = false){
     // Reload the chart data from Salesforce to ensure bars reflect updated dates
     if (!this.level1Object) {
       return;
@@ -2385,9 +2370,8 @@ handleSearchClear(event) {
         }
       })
       .then(() => {
-        // Rebuild view and bars from fresh data
-        this._refreshView();
-      })
+  this._refreshView(preserveScroll);
+})
       .catch((error) => {
         this.errorMessage = `Error reloading chart data: ${this._msg(error)}`;
       });
@@ -2475,6 +2459,54 @@ handleSearchClear(event) {
     }
     return true;
   }
+  // ADD this new method before _findRecord():
+_buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, sec2Fields) {
+  // Search sourceLevel1Data first (always populated, even before _refreshView settles)
+  let item = null;
+  for (const l1 of this.sourceLevel1Data || []) {
+    if (level === 1 && l1.record.Id === id) { item = l1; break; }
+    for (const l2 of l1.children || []) {
+      if (level === 2 && l2.record.Id === id) { item = l2; break; }
+      for (const l3 of l2.children || []) {
+        if (level === 3 && l3.record.Id === id) { item = l3; break; }
+      }
+      if (item) break;
+    }
+    if (item) break;
+  }
+  // Fallback to level1Data view copy
+  if (!item) item = this._findItem(id, level);
+  if (!item) return null;
+
+  const record = item.record || {};
+  const statusField = this._getStatusField(level);
+  const statusValue = this._getStatusValue(record, statusField);
+
+  const summary = [
+    { key: "name",     label: "Name",     value: record.Name || "N/A" },
+    {
+      key: "owner", label: "Owner",
+      value: item.ownerName || record.Owner?.Name || "N/A",
+      isOwner: true,
+      ownerInitials: item.ownerInitials,
+      ownerColor: `background-color: ${item.ownerColor}; color: #ffffff;`
+    },
+    {
+      key: "status", label: "Status",
+      value: statusValue || "N/A",
+      valueStyle: this._getStatusColor(statusValue)
+    },
+    { key: "start",    label: "Start",    value: this._formatDate(this._getItemStartDate(item, level)) },
+    { key: "end",      label: "End",      value: this._formatDate(this._getItemEndDate(item, level)) },
+    { key: "duration", label: "Duration", value: item.duration || "N/A" }
+  ];
+
+  return {
+    summary,
+    section1: { name: sec1Name, fields: sec1Fields },
+    section2: { name: sec2Name, fields: sec2Fields }
+  };
+}
 
   _findRecord(id) {
     for (const l1 of this.level1Data || []) {
@@ -2674,7 +2706,7 @@ handleSearchClear(event) {
     return dates;
   }
 
-  _refreshView() {
+  _refreshView(preserveScroll = false)  {
     const searchTerm = this.searchTerm;
     const hasActiveQuery = this._hasActiveQuery();
     let matchCount = 0;
@@ -2763,7 +2795,10 @@ handleSearchClear(event) {
 
     this.level1Data = view;
     this.matchCount = matchCount;
-    this.initTimeline();
+    this.initTimeline(preserveScroll);
+if (!preserveScroll) {
+  setTimeout(() => this.scrollToToday(), 50);
+}
   }
 
   _refreshBarsForCurrentScale() {
@@ -3539,4 +3574,39 @@ handleSearchClear(event) {
 
     return canvas;
   }
+get legendItems() {
+  const parsed = this._parseStatusColorMap();
+  
+  // Start with configured custom mappings
+  const items = parsed.map((item) => ({
+    label: item.status.charAt(0).toUpperCase() + item.status.slice(1),
+    tone: item.tone,
+    colorStyle: this._getSwatchColorStyle(item.tone)
+  }));
+
+  // If no custom map is set, fall back to the 4 default tones
+  if (!items.length) {
+      return [
+        {label: "Not Started", tone: "not-started", colorStyle: "background-color:#dce1e7;" },
+        { label: "New",       tone: "new", colorStyle: "background-color:#2d5a8e;" },
+        { label: "Pending",   tone: "progress",        colorStyle: "background-color:#c75c00;" },
+        { label: "Completed", tone: "complete",    colorStyle: "background-color:#1a6b2a;" }
+      ];
+    }
+
+  return items;
+}
+
+get hasLegend() {
+  return this.legendItems.length > 0;
+}
+
+_getSwatchColorStyle(tone) {
+  if (tone === "not-started") return "background-color:#dce1e7;";
+  if (tone === "new") return "background-color:#2d5a8e;";
+  if (tone === "progress")    return "background-color:#c75c00;";
+  if (tone === "complete")    return "background-color:#1a6b2a;";
+  if (tone === "risk")        return "background-color:#d84315;";
+  return "background-color:#94a3b8;";
+}
 }

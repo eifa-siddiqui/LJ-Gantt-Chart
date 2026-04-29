@@ -53,43 +53,57 @@
     </template>
 
     <div class="filter-bar">
-      <div class="filter-group filter-search-group">
-        <label class="filter-label">Search:</label>
-        <div class="search-shell">
-          <input type="text" class="filter-search" placeholder="Find..." value={searchTerm}
-            oninput={handleSearchInput} />
-          <template if:true={hasSearchTerm}>
-            <button class="btn-search-clear" onmousedown={handleSearchClear} title="Clear search">
-              &times;
-            </button>
-          </template>
-        </div>
-        <template if:true={hasSearchTerm}>
-          <span class="search-result-count">{searchResultInfo}</span>
-        </template>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">Status:</label>
-        <select class="filter-select" onchange={handleStatusFilterChange}>
-          <template for:each={statusSelectOptions} for:item="option">
-            <option key={option.value} value={option.value} selected={option.selected}>
-              {option.label}
-            </option>
-          </template>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">Owner:</label>
-        <select class="filter-select" onchange={handleOwnerFilterChange}>
-          <template for:each={ownerSelectOptions} for:item="option">
-            <option key={option.value} value={option.value} selected={option.selected}>
-              {option.label}
-            </option>
-          </template>
-        </select>
-      </div>
+  <div class="filter-group filter-search-group">
+    <label class="filter-label">Search:</label>
+    <div class="search-shell">
+      <input type="text" class="filter-search" placeholder="Find..." value={searchTerm}
+        oninput={handleSearchInput} />
+      <template if:true={hasSearchTerm}>
+        <button class="btn-search-clear" onmousedown={handleSearchClear} title="Clear search">
+          &times;
+        </button>
+      </template>
     </div>
+    <template if:true={hasSearchTerm}>
+      <span class="search-result-count">{searchResultInfo}</span>
+    </template>
+  </div>
 
+  <div class="filter-group">
+    <label class="filter-label">Status:</label>
+    <select class="filter-select" onchange={handleStatusFilterChange}>
+      <template for:each={statusSelectOptions} for:item="option">
+        <option key={option.value} value={option.value} selected={option.selected}>
+          {option.label}
+        </option>
+      </template>
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label class="filter-label">Owner:</label>
+    <select class="filter-select" onchange={handleOwnerFilterChange}>
+      <template for:each={ownerSelectOptions} for:item="option">
+        <option key={option.value} value={option.value} selected={option.selected}>
+          {option.label}
+        </option>
+      </template>
+    </select>
+  </div>
+
+  <!-- Legend moved inside -->
+  <template if:true={hasLegend}>
+    <div class="gantt-legend" style="margin-left:auto;">
+
+      <template for:each={legendItems} for:item="leg">
+        <span key={leg.tone} class="gantt-legend-item">
+          <span class="gantt-legend-swatch" style={leg.colorStyle}></span>
+          <span class="gantt-legend-label">{leg.label}</span>
+        </span>
+      </template>
+    </div>
+  </template>
+</div>
     <template if:true={isLoading}>
       <div class="loading-overlay">
         <div class="spinner"></div>
