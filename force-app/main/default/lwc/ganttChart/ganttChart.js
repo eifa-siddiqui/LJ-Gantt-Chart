@@ -108,7 +108,7 @@ export default class DynamicGantt extends LightningElement {
   @track statusChoices = [];
   @track tooltip = { visible: false, title: "", details: [], style: "" };
   @track selectedItemCache = null;
-  
+  @track exportMenuOpen = false;
   @track isFilterPanelOpen   = false;
   @track filterRows          = [];
   @track availableFilterFields = [];
@@ -120,17 +120,18 @@ export default class DynamicGantt extends LightningElement {
   endDateLimit;
   orgToday;
   @track searchTerm = "";
+  @track sourceLevel1Data = [];
+  @track changeHistory = [];
+  @track isSavingChange = false;
+  @track dragConfirm = { visible: false };
+  @track dragTooltip = { visible: false, label: "", dateStr: "", style: "" };
+  @track isDarkMode = false;
   todayLineStyle = "";
   timelineScale = "months";
   isFullscreen = false;
   statusFilter = "all";
   ownerFilter = "all";
   isCurrentRecordScope = false;
-  @track sourceLevel1Data = [];
-  @track changeHistory = [];
-  @track isSavingChange = false;
-  @track dragConfirm = { visible: false };
-  @track dragTooltip = { visible: false, label: "", dateStr: "", style: "" };
   suppressBarClick = false;
   dragState = null;
   sidebarResizeState = null;
@@ -140,7 +141,17 @@ export default class DynamicGantt extends LightningElement {
   durationColWidth = DEFAULT_DURATION_COL_WIDTH;
   ownerColWidth = DEFAULT_OWNER_COL_WIDTH;
   sidebarWidthValue = DEFAULT_SIDEBAR_WIDTH;
+  toggleDarkMode() {
+  this.isDarkMode = !this.isDarkMode;
+}
+toggleExportMenu(event) {
+  event.stopPropagation();
+  this.exportMenuOpen = !this.exportMenuOpen;
+}
 
+closeExportMenu() {
+  this.exportMenuOpen = false;
+}
   get allObjectsButtonLabel() {
     return this.allObjectsLabel || "All Projects";
   }
@@ -185,9 +196,17 @@ export default class DynamicGantt extends LightningElement {
   }
 
   get wrapperClass() {
-    const fullscreenClass = this.isFullscreen ? " is-fullscreen" : "";
-    return `gantt-wrapper scale-${this.timelineScale}${fullscreenClass}`;
-  }
+  const fullscreenClass = this.isFullscreen ? ' is-fullscreen' : '';
+  const darkClass       = this.isDarkMode   ? ' dark-mode'     : '';
+  return `gantt-wrapper scale-${this.timelineScale}${fullscreenClass}${darkClass}`;
+}
+get darkModeIcon() {
+  return this.isDarkMode ? 'utility:light' : 'utility:dark_mode';
+}
+
+get darkModeTitle() {
+  return this.isDarkMode ? 'Light Mode' : 'Dark Mode';
+}
 
   get wrapperStyle() {
     return `--name-col-width:${this.nameColWidth}px; --duration-col-width:${this.durationColWidth}px; --owner-col-width:${this.ownerColWidth}px; --sidebar-width:${this.sidebarWidthPx}px;`;
@@ -426,6 +445,12 @@ export default class DynamicGantt extends LightningElement {
     this._dragEndHandler = this.handleBarDragEnd.bind(this);
     this._sidebarResizeMoveHandler = this.handleSidebarResizeMove.bind(this);
     this._sidebarResizeEndHandler = this.handleSidebarResizeEnd.bind(this);
+    this._exportClickOutHandler = () => {
+  if (this.exportMenuOpen) {
+    this.exportMenuOpen = false;
+  }
+};
+document.addEventListener('click', this._exportClickOutHandler);
     document.addEventListener("fullscreenchange", this._fullscreenHandler);
     document.addEventListener("keydown", this._keydownHandler);
     document.addEventListener("mousemove", this._dragMoveHandler);
@@ -464,6 +489,9 @@ export default class DynamicGantt extends LightningElement {
     if (this._resizeHandler) {
       window.removeEventListener("resize", this._resizeHandler);
     }
+    if (this._exportClickOutHandler) {
+  document.removeEventListener('click', this._exportClickOutHandler);
+}
   }
 
   handleDocumentKeyDown(event) {
@@ -1857,17 +1885,119 @@ handleSearchClear(event) {
     this.loadLevel1();
   }
 
-  async exportChartAsJPG() {
-    try {
-      const canvas = this._renderChartToCanvas();
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/jpeg", 0.95);
-      link.download = `${(this.displayTitle || "gantt-chart").replace(/[^a-z0-9-_]+/gi, "_")}.jpg`;
-      link.click();
-    } catch (error) {
-      this.errorMessage = `Export failed: ${error.message}`;
-    }
+  // Renamed — called by JPG menu item
+async exportAsJPG() {
+  this.exportMenuOpen = false;
+  try {
+    const canvas = this._renderChartToCanvas();
+    const link   = document.createElement('a');
+    link.href     = canvas.toDataURL('image/jpeg', 0.95);
+    link.download = `${this._safeFileName()}.jpg`;
+    link.click();
+  } catch (error) {
+    this.errorMessage = `JPG export failed: ${error.message}`;
   }
+}
+
+// New — PDF export
+async exportAsPDF() {
+  this.exportMenuOpen = false;
+  try {
+    const canvas  = this._renderChartToCanvas();
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+    // Strip the data URL prefix to get raw base64
+    const base64 = imgData.split(',')[1];
+
+    // Canvas dimensions in points (1px ≈ 0.75pt)
+    const pxTopt  = 0.75;
+    const pdfW    = Math.round(canvas.width  * pxTopt);
+    const pdfH    = Math.round(canvas.height * pxTopt);
+
+    const pdf = this._buildMinimalPDF(base64, pdfW, pdfH, canvas.width, canvas.height);
+
+    // Trigger download
+    const blob = new Blob([pdf], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href     = url;
+    link.download = `${this._safeFileName()}.pdf`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  } catch (error) {
+    this.errorMessage = `PDF export failed: ${error.message}`;
+  }
+}
+
+_buildMinimalPDF(base64jpeg, pdfW, pdfH, imgPxW, imgPxH) {
+  // Minimal valid PDF structure — no external dependency
+  const imgData   = atob(base64jpeg);
+  const imgLen    = imgData.length;
+
+  // Build byte array from decoded base64
+  const imgBytes  = new Uint8Array(imgLen);
+  for (let i = 0; i < imgLen; i++) {
+    imgBytes[i] = imgData.charCodeAt(i);
+  }
+
+  // PDF objects as strings
+  const obj1 = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
+  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
+  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfW} ${pdfH}] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>\nendobj\n`;
+  const streamContent = `q\n${pdfW} 0 0 ${pdfH} 0 0 cm\n/Im1 Do\nQ\n`;
+  const obj4 = `4 0 obj\n<< /Length ${streamContent.length} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
+
+  // Build image XObject — must be binary, so we assemble carefully
+  const imgHeader = `5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgPxW} /Height ${imgPxH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgLen} >>\nstream\n`;
+  const imgFooter = `\nendstream\nendobj\n`;
+
+  // Calculate byte offsets for xref
+  const enc     = new TextEncoder();
+  const hdr     = enc.encode('%PDF-1.4\n%\xFF\xFF\xFF\xFF\n');
+  const b1      = enc.encode(obj1);
+  const b2      = enc.encode(obj2);
+  const b3      = enc.encode(obj3);
+  const b4      = enc.encode(obj4);
+  const bih     = enc.encode(imgHeader);
+  const bif     = enc.encode(imgFooter);
+
+  const off1    = hdr.length;
+  const off2    = off1 + b1.length;
+  const off3    = off2 + b2.length;
+  const off4    = off3 + b3.length;
+  const off5    = off4 + b4.length;
+
+  const xref =
+    `xref\n0 6\n0000000000 65535 f \n` +
+    `${String(off1).padStart(10,'0')} 00000 n \n` +
+    `${String(off2).padStart(10,'0')} 00000 n \n` +
+    `${String(off3).padStart(10,'0')} 00000 n \n` +
+    `${String(off4).padStart(10,'0')} 00000 n \n` +
+    `${String(off5).padStart(10,'0')} 00000 n \n`;
+
+  const totalLen = off5 + bih.length + imgLen + bif.length;
+  const trailer  = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${totalLen}\n%%EOF`;
+
+  // Assemble final PDF as Uint8Array
+  const bXref   = enc.encode(xref);
+  const bTrail  = enc.encode(trailer);
+  const total   = hdr.length + b1.length + b2.length + b3.length + b4.length +
+                  bih.length + imgLen + bif.length + bXref.length + bTrail.length;
+  const out     = new Uint8Array(total);
+  let pos = 0;
+  const write = (arr) => { out.set(arr, pos); pos += arr.length; };
+  write(hdr); write(b1); write(b2); write(b3); write(b4);
+  write(bih); write(imgBytes); write(bif);
+  write(bXref); write(bTrail);
+
+  return out;
+}
+// Helper — sanitised file name
+_safeFileName() {
+  return (this.displayTitle || 'gantt-chart')
+    .replace(/[^a-z0-9-_]+/gi, '_')
+    .toLowerCase();
+}
 
   toggleFullscreen() {
     if (this.isFullscreen) {
@@ -3360,322 +3490,278 @@ _getBarColorOverride(statusValue) {
   }
 
   _renderChartToCanvas() {
-    const rows = [];
-    for (const l1 of this.level1Data || []) {
-      rows.push({ type: "l1", item: l1 });
-      if (l1.expanded) {
-        for (const l2 of l1.children || []) {
-          rows.push({ type: "l2", item: l2 });
-          if (l2.expanded) {
-            for (const l3 of l2.children || []) {
-              rows.push({ type: "l3", item: l3 });
-            }
+  const rows = [];
+  for (const l1 of this.level1Data || []) {
+    rows.push({ type: 'l1', item: l1 });
+    if (l1.expanded) {
+      for (const l2 of l1.children || []) {
+        rows.push({ type: 'l2', item: l2 });
+        if (l2.expanded) {
+          for (const l3 of l2.children || []) {
+            rows.push({ type: 'l3', item: l3 });
           }
         }
       }
     }
+  }
 
-    const sidebarWidth = this.sidebarWidthPx;
-    const chartWidth = Math.max(
-      this.timelineMonths.length * this.timelineUnitWidthPx,
-      this.timelineUnitWidthPx
-    );
-    const exportTopBandHeight = 56;
-    const headerHeight = 44;
-    const filterHeight = 44;
-    const rowHeightL1 = 36;
-    const rowHeightChild = 32;
-    const contentHeight =
-      rows.reduce(
-        (sum, row) => sum + (row.type === "l1" ? rowHeightL1 : rowHeightChild),
-        0
-      ) || 220;
-    const width = sidebarWidth + chartWidth;
-    const height =
-      exportTopBandHeight +
-      headerHeight +
-      filterHeight +
-      headerHeight +
-      contentHeight;
+  const sidebarWidth      = this.sidebarWidthPx;
+  const chartWidth        = Math.max(
+    this.timelineMonths.length * this.timelineUnitWidthPx,
+    this.timelineUnitWidthPx
+  );
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
+  // ── Tighter layout constants ──────────────────────────────────────────
+  const topBandHeight     = 48;   // title + date bar
+  const colHeaderHeight   = 36;   // NAME / DURATION / OWNER row
+  const timelineHdrHeight = 36;   // month labels row
+  const rowHeightL1       = 38;
+  const rowHeightChild    = 32;
+  const contentHeight     = rows.reduce(
+    (sum, row) => sum + (row.type === 'l1' ? rowHeightL1 : rowHeightChild), 0
+  ) || 200;
 
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
+  const width  = sidebarWidth + chartWidth;
+  const height = topBandHeight + colHeaderHeight + timelineHdrHeight + contentHeight;
 
-    const exportDateLabel = `Exported ${this._formatDate(this._getCurrentDate())}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, exportTopBandHeight);
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "700 20px Segoe UI";
-    ctx.textAlign = "left";
-    ctx.fillText(this.displayTitle || "Gantt Chart", 18, 31);
-    ctx.fillStyle = "#475569";
-    ctx.font = "600 11px Segoe UI";
-    ctx.textAlign = "right";
-    ctx.fillText(exportDateLabel, width - 18, 28);
-    ctx.textAlign = "left";
+  const canvas = document.createElement('canvas');
 
-    ctx.fillStyle = "#f7f7f7";
-    ctx.fillRect(
-      0,
-      exportTopBandHeight + headerHeight + filterHeight,
-      width,
-      headerHeight
-    );
-    ctx.strokeStyle = "#0055b3";
-    ctx.lineWidth = 2;
+  // ── 2× pixel ratio for crisp text ────────────────────────────────────
+  const DPR    = 2;
+  canvas.width  = width  * DPR;
+  canvas.height = height * DPR;
+  canvas.style.width  = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  // ── Background ────────────────────────────────────────────────────────
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  // ── Top band: title left, date right ─────────────────────────────────
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, width, topBandHeight);
+
+  // Title — large and bold
+  ctx.fillStyle  = '#ffffff';
+  ctx.font       = '700 22px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign  = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(this.displayTitle || 'Gantt Chart', 20, topBandHeight / 2);
+
+  // Date — right-aligned, clean format (no "Exported" word)
+  const today     = this._getCurrentDate();
+  const dateLabel = today.toLocaleDateString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric'
+  }); // e.g. "30 Apr 2026"
+  ctx.fillStyle   = '#94a3b8';
+  ctx.font        = '500 13px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign   = 'right';
+  ctx.fillText(dateLabel, width - 20, topBandHeight / 2);
+
+  // ── Column headers (NAME / DURATION / OWNER) ─────────────────────────
+  const colHdrY   = topBandHeight;
+  const nameX     = 20;
+  const durationX = SIDEBAR_FRAME_PX + this.nameColWidth + COLUMN_GAP_PX + 6;
+  const ownerX    = SIDEBAR_FRAME_PX + this.nameColWidth + this.durationColWidth + COLUMN_GAP_PX * 2 + 6;
+
+  ctx.fillStyle   = '#f1f5f9';
+  ctx.fillRect(0, colHdrY, sidebarWidth, colHeaderHeight);
+  ctx.fillRect(sidebarWidth, colHdrY, chartWidth, colHeaderHeight);
+
+  ctx.fillStyle    = '#475569';
+  ctx.font         = '700 11px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'middle';
+  const colHdrMid  = colHdrY + colHeaderHeight / 2;
+  ctx.fillText('NAME',     nameX,     colHdrMid);
+  ctx.fillText('DURATION', durationX, colHdrMid);
+  ctx.fillText('OWNER',    ownerX,    colHdrMid);
+
+  // ── Timeline month headers ────────────────────────────────────────────
+  const timeHdrY  = topBandHeight + colHeaderHeight;
+  ctx.fillStyle   = '#f8fafc';
+  ctx.fillRect(sidebarWidth, timeHdrY, chartWidth, timelineHdrHeight);
+
+  // Bottom border under timeline header
+  ctx.strokeStyle = '#0055b3';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.moveTo(sidebarWidth, timeHdrY + timelineHdrHeight);
+  ctx.lineTo(width,        timeHdrY + timelineHdrHeight);
+  ctx.stroke();
+
+  this.timelineMonths.forEach((month, index) => {
+    const x = sidebarWidth + index * this.timelineUnitWidthPx;
+
+    // Vertical grid line
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth   = 1;
     ctx.beginPath();
-    ctx.moveTo(
-      0,
-      exportTopBandHeight + headerHeight + filterHeight + headerHeight
-    );
-    ctx.lineTo(
-      width,
-      exportTopBandHeight + headerHeight + filterHeight + headerHeight
-    );
+    ctx.moveTo(x, timeHdrY);
+    ctx.lineTo(x, height);
     ctx.stroke();
 
-    const nameX = 18;
-    const durationX = SIDEBAR_FRAME_PX + this.nameColWidth + COLUMN_GAP_PX + 6;
-    const ownerX =
-      SIDEBAR_FRAME_PX +
-      this.nameColWidth +
-      this.durationColWidth +
-      COLUMN_GAP_PX * 2 +
-      6;
-    ctx.font = "700 11px Segoe UI";
-    ctx.fillStyle = "#475569";
-    ctx.fillText(
-      "NAME",
-      nameX,
-      exportTopBandHeight + headerHeight + filterHeight + 26
-    );
-    ctx.fillText(
-      "DURATION",
-      durationX,
-      exportTopBandHeight + headerHeight + filterHeight + 26
-    );
-    ctx.fillText(
-      "OWNER",
-      ownerX,
-      exportTopBandHeight + headerHeight + filterHeight + 26
-    );
+    // Month label — bigger and clearer
+    const isCurrent = month.cellClass.includes('is-current');
+    ctx.fillStyle    = isCurrent ? '#0055b3' : '#334155';
+    ctx.font         = `${isCurrent ? '700' : '600'} 12px "Segoe UI", Arial, sans-serif`;
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(month.label, x + 8, timeHdrY + timelineHdrHeight / 2);
+  });
 
-    this.timelineMonths.forEach((month, index) => {
-      const x = sidebarWidth + index * this.timelineUnitWidthPx;
-      ctx.strokeStyle = "#e8edf3";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, exportTopBandHeight + headerHeight + filterHeight);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      ctx.fillStyle = month.cellClass.includes("is-current")
-        ? "#0055b3"
-        : "#64748b";
-      ctx.font = "700 11px Segoe UI";
-      ctx.fillText(
-        month.label,
-        x + 8,
-        exportTopBandHeight + headerHeight + filterHeight + 26
-      );
-    });
-
-    const currentDate = this._getCurrentDate();
-    const todayRatio =
-      this.startDateLimit && this.endDateLimit
-        ? (currentDate.getTime() - this.startDateLimit.getTime()) /
-          (this.endDateLimit.getTime() - this.startDateLimit.getTime())
-        : 0;
-    const todayX = sidebarWidth + Math.max(0, todayRatio) * chartWidth;
-    ctx.strokeStyle = "#e53935";
-    ctx.lineWidth = 2;
+  // ── Today line ────────────────────────────────────────────────────────
+  const currentDate  = this._getCurrentDate();
+  const contentStartY = topBandHeight + colHeaderHeight + timelineHdrHeight;
+  if (this.startDateLimit && this.endDateLimit) {
+    const ratio  = (currentDate.getTime() - this.startDateLimit.getTime()) /
+                   (this.endDateLimit.getTime()  - this.startDateLimit.getTime());
+    const todayX = sidebarWidth + Math.max(0, ratio) * chartWidth;
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.moveTo(
-      todayX,
-      exportTopBandHeight + headerHeight + filterHeight + headerHeight
-    );
+    ctx.moveTo(todayX, contentStartY);
     ctx.lineTo(todayX, height);
     ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
-    const targetLineStyle = this.projectEndLineStyle;
-    if (!targetLineStyle.includes("display:none")) {
-      const match = targetLineStyle.match(/left:([0-9.]+)%/);
-      if (match) {
-        const targetX =
-          sidebarWidth + (parseFloat(match[1]) / 100) * chartWidth;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeStyle = "#2e7d32";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(
-          targetX,
-          exportTopBandHeight + headerHeight + filterHeight + headerHeight
-        );
-        ctx.lineTo(targetX, height);
-        ctx.stroke();
-        ctx.setLineDash([]);
+  // ── Rows ──────────────────────────────────────────────────────────────
+  let currentY = contentStartY;
+
+  rows.forEach((row) => {
+    const rowHeight = row.type === 'l1' ? rowHeightL1 : rowHeightChild;
+    const midY      = currentY + rowHeight / 2;
+
+    // Row background
+    ctx.fillStyle = row.type === 'l1' ? '#f8fafc' : '#ffffff';
+    ctx.fillRect(0, currentY, width, rowHeight);
+
+    // Row separator
+    ctx.strokeStyle = '#e9eef4';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(0,     currentY + rowHeight);
+    ctx.lineTo(width, currentY + rowHeight);
+    ctx.stroke();
+
+    // ── Sidebar text ────────────────────────────────────────────────────
+    const indent = row.type === 'l1' ? 20 : row.type === 'l2' ? 34 : 48;
+
+    // Name — larger font, bold for L1
+    ctx.fillStyle    = '#1e293b';
+    ctx.font         = row.type === 'l1'
+      ? '700 13px "Segoe UI", Arial, sans-serif'
+      : '500 12px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+
+    // Clip name to sidebar width
+    const maxNameWidth = this.nameColWidth - indent + 10;
+    let   name         = row.item.record?.Name || '';
+    while (name.length > 3 && ctx.measureText(name).width > maxNameWidth) {
+      name = name.slice(0, -4) + '…';
+    }
+    ctx.fillText(name, indent, midY);
+
+    // Duration
+    ctx.fillStyle = '#64748b';
+    ctx.font      = '600 11px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(row.item.duration || '', durationX, midY);
+
+    // Owner
+    ctx.fillText(row.item.ownerName || '', ownerX, midY);
+
+    // ── Planned bar (outline) ────────────────────────────────────────────
+    const plannedLeft  = String(row.item.plannedBarStyle || '').match(/left:([0-9.]+)%/);
+    const plannedWidth = String(row.item.plannedBarStyle || '').match(/width:([0-9.]+)%/);
+    if (plannedLeft && plannedWidth) {
+      const pX = sidebarWidth + (parseFloat(plannedLeft[1])  / 100) * chartWidth;
+      const pW = Math.max(16, (parseFloat(plannedWidth[1]) / 100) * chartWidth);
+      const pH = row.type === 'l1' ? 20 : 16;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = '#1d70d6';
+      ctx.lineWidth   = 1.5;
+      ctx.strokeRect(pX, midY - pH / 2, pW, pH);
+      ctx.setLineDash([]);
+    }
+
+    // ── Actual bar ───────────────────────────────────────────────────────
+    const barLeft  = String(row.item.barStyle || '').match(/left:([0-9.]+)%/);
+    const barWidth = String(row.item.barStyle || '').match(/width:([0-9.]+)%/);
+    if (barLeft && barWidth) {
+      const bX  = sidebarWidth + (parseFloat(barLeft[1])  / 100) * chartWidth;
+      const bW  = Math.max(16, (parseFloat(barWidth[1]) / 100) * chartWidth);
+      const bH  = row.type === 'l1' ? 20 : 16;
+      const bY  = midY - bH / 2;
+
+      // Progress fill width
+      const progressPct = parseFloat(
+        String(row.item.progressStyle || 'width:100').match(/([0-9.]+)/)?.[1] || '100'
+      );
+      const fillW = Math.max(8, bW * (progressPct / 100));
+
+      // Color — configured > tone fallback
+      const statusVal      = row.item.progressLabel || '';
+      const configuredColor = this._getConfiguredColor(statusVal.toLowerCase());
+      ctx.fillStyle = configuredColor || (
+        row.item.fillClass.includes('complete')    ? '#15803d' :
+        row.item.fillClass.includes('risk')        ? '#d84315' :
+        row.item.fillClass.includes('not-started') ? '#2d5a8e' :
+        row.item.fillClass.includes('pending')     ? '#f97316' : '#64748b'
+      );
+
+      // Rounded rect helper
+      const radius = 3;
+      ctx.beginPath();
+      ctx.moveTo(bX + radius, bY);
+      ctx.lineTo(bX + fillW - radius, bY);
+      ctx.quadraticCurveTo(bX + fillW, bY, bX + fillW, bY + radius);
+      ctx.lineTo(bX + fillW, bY + bH - radius);
+      ctx.quadraticCurveTo(bX + fillW, bY + bH, bX + fillW - radius, bY + bH);
+      ctx.lineTo(bX + radius, bY + bH);
+      ctx.quadraticCurveTo(bX, bY + bH, bX, bY + bH - radius);
+      ctx.lineTo(bX, bY + radius);
+      ctx.quadraticCurveTo(bX, bY, bX + radius, bY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Status label inside bar
+      if (statusVal && bW > 50) {
+        ctx.save();
+        ctx.fillStyle    = '#ffffff';
+        ctx.font         = '700 11px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(statusVal, bX + bW / 2, midY);
+        ctx.restore();
       }
     }
 
-    let currentY =
-      exportTopBandHeight + headerHeight + filterHeight + headerHeight;
-    rows.forEach((row) => {
-      const rowHeight = row.type === "l1" ? rowHeightL1 : rowHeightChild;
-      ctx.fillStyle = row.type === "l1" ? "#fafbfc" : "#ffffff";
-      ctx.fillRect(0, currentY, width, rowHeight);
-      ctx.strokeStyle = "#edf2f7";
-      ctx.beginPath();
-      ctx.moveTo(0, currentY + rowHeight);
-      ctx.lineTo(width, currentY + rowHeight);
-      ctx.stroke();
+    // ── Target end diamond ───────────────────────────────────────────────
+    const targetMatch = String(row.item.targetEndStyle || '').match(/left:([0-9.]+)%/);
+    if (targetMatch && !String(row.item.targetEndStyle).includes('display:none')) {
+      const tX = sidebarWidth + (parseFloat(targetMatch[1]) / 100) * chartWidth;
+      ctx.save();
+      ctx.translate(tX, midY);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle   = '#e9f8f0';
+      ctx.strokeStyle = '#1f8f63';
+      ctx.lineWidth   = 1.5;
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.strokeRect(-5, -5, 10, 10);
+      ctx.restore();
+    }
 
-      ctx.fillStyle = "#334155";
-      ctx.font = row.type === "l1" ? "700 12px Segoe UI" : "500 12px Segoe UI";
-      const textX = row.type === "l1" ? 28 : row.type === "l2" ? 44 : 58;
-      ctx.fillText(row.item.record?.Name || "", textX, currentY + 22);
-      ctx.fillStyle = "#64748b";
-      ctx.font = "700 11px Segoe UI";
-      ctx.fillText(row.item.duration || "", durationX, currentY + 22);
-      ctx.fillText(row.item.ownerName || "", ownerX, currentY + 22);
+    currentY += rowHeight;
+  });
 
-      // Draw planned bar (dotted outline) if it exists and differs from actual bar
-      const plannedLeftMatch = String(row.item.plannedBarStyle || "").match(
-        /left:([0-9.]+)%/
-      );
-      const plannedWidthMatch = String(row.item.plannedBarStyle || "").match(
-        /width:([0-9.]+)%/
-      );
-      if (plannedLeftMatch && plannedWidthMatch) {
-        const pBarX =
-          sidebarWidth + (parseFloat(plannedLeftMatch[1]) / 100) * chartWidth;
-        const pBarWidth = Math.max(
-          18,
-          (parseFloat(plannedWidthMatch[1]) / 100) * chartWidth
-        );
-        const borderHeight = row.type === "l1" ? 18 : 16;
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = "#1d70d6";
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(
-          pBarX,
-          currentY + (rowHeight - borderHeight) / 2,
-          pBarWidth,
-          borderHeight
-        );
-        ctx.setLineDash([]);
-      }
-
-      const leftMatch = String(row.item.barStyle || "").match(
-        /left:([0-9.]+)%/
-      );
-      const widthMatch = String(row.item.barStyle || "").match(
-        /width:([0-9.]+)%/
-      );
-      if (leftMatch && widthMatch) {
-        const barX =
-          sidebarWidth + (parseFloat(leftMatch[1]) / 100) * chartWidth;
-        const barWidth = Math.max(
-          18,
-          (parseFloat(widthMatch[1]) / 100) * chartWidth
-        );
-        const barY = currentY + (rowHeight - (row.type === "l1" ? 18 : 16)) / 2;
-        const borderHeight = row.type === "l1" ? 18 : 20;
-
-        if (row.type !== "l1") {
-          ctx.setLineDash([4, 3]);
-          ctx.strokeStyle = "#1976d2";
-          ctx.strokeRect(
-            barX,
-            currentY + (rowHeight - borderHeight) / 2,
-            barWidth,
-            borderHeight
-          );
-          ctx.setLineDash([]);
-        }
-
-        ctx.fillStyle = row.item.fillClass.includes("complete")
-          ? "#43a047"
-          : row.item.fillClass.includes("risk")
-            ? "#d84315"
-            : row.item.fillClass.includes("not-started")
-              ? "#2d5a8e"
-              : row.item.fillClass.includes("pending")
-                ? "#1e88e5"
-                : "#0b5f1b";
-        const innerWidth = Math.max(
-          10,
-          barWidth *
-            (parseFloat(
-              (row.item.progressStyle || "width:100").match(/([0-9.]+)/)?.[1] ||
-                "100"
-            ) /
-              100)
-        );
-        const innerHeight = row.type === "l1" ? 18 : 16;
-        ctx.fillRect(barX, barY, innerWidth, innerHeight);
-
-        const statusLabel = String(row.item.progressLabel || "").trim();
-        if (statusLabel && barWidth > 46) {
-          ctx.save();
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "700 10px Segoe UI";
-          ctx.textAlign = "center";
-          ctx.fillText(
-            statusLabel,
-            barX + barWidth / 2,
-            barY + innerHeight / 2 + 4
-          );
-          ctx.restore();
-        }
-      }
-
-      const earlyLeftMatch = String(row.item.completedEarlyStyle || "").match(
-        /left:([0-9.]+)%/
-      );
-      const earlyWidthMatch = String(row.item.completedEarlyStyle || "").match(
-        /width:([0-9.]+)%/
-      );
-      if (earlyLeftMatch && earlyWidthMatch) {
-        const eX =
-          sidebarWidth + (parseFloat(earlyLeftMatch[1]) / 100) * chartWidth;
-        const eW = (parseFloat(earlyWidthMatch[1]) / 100) * chartWidth;
-        ctx.beginPath();
-        ctx.moveTo(eX, currentY + rowHeight / 2);
-        ctx.lineTo(eX + eW, currentY + rowHeight / 2);
-        ctx.strokeStyle = "#43a047";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      const targetMatch = String(row.item.targetEndStyle || "").match(
-        /left:([0-9.]+)%/
-      );
-      if (targetMatch) {
-        const targetX =
-          sidebarWidth + (parseFloat(targetMatch[1]) / 100) * chartWidth;
-        const targetY = currentY + rowHeight / 2;
-        ctx.save();
-        ctx.translate(targetX, targetY);
-        ctx.rotate((45 * Math.PI) / 180);
-        ctx.fillStyle = "#e9f8f0";
-        ctx.strokeStyle = "#1f8f63";
-        ctx.lineWidth = 2;
-        ctx.fillRect(-6, -6, 12, 12);
-        ctx.strokeRect(-6, -6, 12, 12);
-        ctx.restore();
-      }
-
-      currentY += rowHeight;
-    });
-
-    return canvas;
-  }
+  return canvas;
+}
 get legendItems() {
   const parsed = this._parseStatusColorMap();
 

@@ -25,6 +25,27 @@
           </template>
         </select>
         <div class="separator"></div>
+        <!-- Export -->
+        <div class="export-dropdown-wrap">
+  <button class="btn-action export-toggle-btn" onclick={toggleExportMenu} title="Export">
+    <lightning-icon icon-name="utility:download" size="x-small" class="export-btn-icon"></lightning-icon>
+    <span>Export</span>
+    <span class="export-chevron">▾</span>
+  </button>
+  <template if:true={exportMenuOpen}>
+    <div class="export-dropdown-menu" onclick={stopPropagation}>
+      <button class="export-menu-item" onclick={exportAsJPG}>
+        <lightning-icon icon-name="utility:image" size="x-small"></lightning-icon>
+        <span>Export as JPG</span>
+      </button>
+      <button class="export-menu-item" onclick={exportAsPDF}>
+        <lightning-icon icon-name="utility:page" size="x-small"></lightning-icon>
+        <span>Export as PDF</span>
+      </button>
+    </div>
+  </template>
+</div>
+        
         <button class={filterButtonClass} onclick={toggleFilterPanel} title="Filter" aria-label="Toggle Filters"
           aria-expanded={isFilterPanelOpen}>
           <lightning-icon icon-name="utility:filterList" size="x-small"></lightning-icon>
@@ -32,15 +53,16 @@
             <span class="filter-badge">{filterBadgeLabel}</span>
           </template>
         </button>
-
+        <!--Dark mode-->
+<button class="btn-darkmode-toggle" onclick={toggleDarkMode} title={darkModeTitle}>
+  <template if:true={isDarkMode}>☀️</template>
+  <template if:false={isDarkMode}>🌙</template>
+</button>
         <!-- Refresh -->
         <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" title="Refresh"
           onclick={reloadChart} variant="border-filled">
         </lightning-button-icon>
-        <!-- Fullscreen toggle -->
-        <lightning-button-icon icon-name="action:download" alternative-text="Export" title="Export"
-          onclick={exportChartAsJPG} variant="border-filled">
-        </lightning-button-icon>
+        
         <!-- Fullscreen toggle -->
         <lightning-button-icon icon-name="utility:expand" alternative-text={fullscreenLabel} title={fullscreenLabel}
           onclick={toggleFullscreen} variant="border-filled">
