@@ -153,7 +153,10 @@ public with sharing class DynamicGanttController {
         try {
             Schema.SObjectType sObjType = Schema.getGlobalDescribe().get(objName);
             Schema.DescribeFieldResult fieldRes = sObjType.getDescribe().fields.getMap().get(fieldName).getDescribe();
-            
+            // Temporarily add inside getStatusProgressMap:
+for (Schema.PicklistEntry ple : fieldRes.getPicklistValues()) {
+    System.debug('Picklist entry: ' + ple.getValue() + ' active: ' + ple.isActive());
+}
             if (fieldRes.getType() == Schema.DisplayType.PICKLIST) {
                 List<Schema.PicklistEntry> ple = fieldRes.getPicklistValues();
                 for (Integer i = 0; i < ple.size(); i++) {

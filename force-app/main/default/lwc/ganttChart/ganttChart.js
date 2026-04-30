@@ -6,6 +6,20 @@ import getOrgToday from "@salesforce/apex/DynamicGanttController.getOrgToday";
 import updateRecordFields from "@salesforce/apex/DynamicGanttController.updateRecordFields";
 import getObjectFields from "@salesforce/apex/DynamicGanttController.getObjectFields";
 
+const STATUS_COLOR_PALETTE = {
+  red:    '#dc2626',
+  orange: '#f97316',
+  yellow: '#ca8a04',
+  green:  '#15803d',
+  blue:   '#2d5a8e',
+  navy:   '#1e3a5f',
+  purple: '#7c3aed',
+  pink:   '#db2777',
+  teal:   '#0f766e',
+  grey:   '#64748b',
+  white:  '#f8fafc',
+  black:  '#0f172a'
+};
 const TIMELINE_CELL_WIDTH_PX = 130;
 const DAY_MS = 1000 * 60 * 60 * 24;
 const TOOLTIP_WIDTH_PX = 220;
@@ -800,7 +814,8 @@ if (!preserveScroll) {
         targetEndDate || plannedEndDate
       ),
       barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}`,
-      progressStyle: this._buildProgressStyle(progress, statusValue),
+      progressStyle: this._buildProgressStyle(progress, statusValue) +
+               this._getBarColorOverride(statusValue),
       progressLabel: statusValue || "",
       statusLabelClass: this._getStatusLabelClass(
         statusValue,
@@ -873,7 +888,8 @@ if (!preserveScroll) {
         targetEndDate || plannedEndDate
       ),
       barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3-bar actual-bar-item"} ${this._barToneClass(fillClass)}`,
-      progressStyle: this._buildProgressStyle(progress, statusValue),
+      progressStyle: this._buildProgressStyle(progress, statusValue) +
+               this._getBarColorOverride(statusValue),
       progressLabel: statusValue || "",
       statusLabelClass: this._getStatusLabelClass(
         statusValue,
@@ -2484,15 +2500,12 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
   const record = item.record || {};
   const statusField = this._getStatusField(level);
   const statusValue = this._getStatusValue(record, statusField);
-
-  const summary = [
+    const summary = [
     { key: "name",     label: "Name",     value: record.Name || "N/A" },
     {
-      key: "owner", label: "Owner",
-      value: item.ownerName || record.Owner?.Name || "N/A",
-      isOwner: true,
-      ownerInitials: item.ownerInitials,
-      ownerColor: `background-color: ${item.ownerColor}; color: #ffffff;`
+      key: "progress", label: "Progress",
+      value: `${Math.min(Math.max(item.progress || 0, 0), 100)}%`,
+      valueStyle: this._getStatusColor(statusValue)
     },
     {
       key: "status", label: "Status",
@@ -2501,7 +2514,16 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
     },
     { key: "start",    label: "Start",    value: this._formatDate(this._getItemStartDate(item, level)) },
     { key: "end",      label: "End",      value: this._formatDate(this._getItemEndDate(item, level)) },
-    { key: "duration", label: "Duration", value: item.duration || "N/A" }
+    { key: "duration", label: "Duration", value: item.duration || "N/A" },
+    // kept for owner section below — hidden from summary grid
+    {
+      key: "owner", label: "Owner",
+      value: item.ownerName || record.Owner?.Name || "N/A",
+      isOwner: true,
+      isHidden: true,
+      ownerInitials: item.ownerInitials,
+      ownerColor: `background-color: ${item.ownerColor}; color: #ffffff;`
+    }
   ];
 
   return {
@@ -2848,7 +2870,8 @@ if (!preserveScroll) {
         ),
         barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(l1FillClass)}`,
         fillClass: l1FillClass,
-        progressStyle: this._buildProgressStyle(l1Progress, l1Status),
+        progressStyle: this._buildProgressStyle(l1Progress, l1Status) +
+               this._getBarColorOverride(l1Status),
         progressLabel: l1Status || "",
         statusLabelClass: this._getStatusLabelClass(
           l1Status,
@@ -2903,7 +2926,8 @@ if (!preserveScroll) {
               l2TargetEnd || l2PlannedEnd
             ),
             barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(l2FillClass)}`,
-            progressStyle: this._buildProgressStyle(l2Progress, l2Status),
+            progressStyle: this._buildProgressStyle(l2Progress, l2Status) +
+               this._getBarColorOverride(l2Status),
             progressLabel: l2Status || "",
             statusLabelClass: this._getStatusLabelClass(
               l2Status,
@@ -2962,7 +2986,8 @@ if (!preserveScroll) {
                   l3TargetEnd || l3PlannedEnd
                 ),
                 barClass: `gantt-bar-item l3-bar actual-bar-item ${this._barToneClass(l3FillClass)}`,
-                progressStyle: this._buildProgressStyle(l3Progress, l3Status),
+                progressStyle: this._buildProgressStyle(l3Progress, l3Status) +
+               this._getBarColorOverride(l3Status),
                 progressLabel: l3Status || "",
                 statusLabelClass: this._getStatusLabelClass(
                   l3Status,
@@ -3015,30 +3040,98 @@ if (!preserveScroll) {
   }
 
   _getConfiguredTone(normalizedStatus) {
-    if (!normalizedStatus) return "";
-    return (
-      this._parseStatusColorMap().find((item) =>
-        normalizedStatus.includes(item.status)
-      )?.tone || ""
-    );
-  }
+  if (!normalizedStatus) return '';
+  // If admin configured a direct color, tone-based class is not needed
+  if (this._getConfiguredColor(normalizedStatus)) return 'custom';
+  return (
+    this._parseStatusColorMap().find(item =>
+      normalizedStatus.includes(item.status)
+    )?.tone || ''
+  );
+}
+
 
   _parseStatusColorMap() {
-    const raw = (this.statusColorMap || "").trim();
-    if (!raw) return [];
-    return raw
-      .split(",")
-      .map((pair) => pair.trim())
-      .filter((pair) => pair.includes("="))
-      .map((pair) => {
-        const [status, tone] = pair
-          .split("=")
-          .map((value) => (value || "").trim().toLowerCase());
-        return { status, tone: this._normalizeTone(tone) };
-      })
-      .filter((item) => item.status && item.tone);
+  const raw = (this.statusColorMap || '').trim();
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(pair => pair.trim())
+    .filter(pair => pair.includes('='))
+    .map(pair => {
+      const eqIndex   = pair.indexOf('=');
+      const status    = pair.substring(0, eqIndex).trim().toLowerCase();
+      // Rejoin everything after first '=' to support rgb(x,y,z) which contains commas
+      const rawColor  = pair.substring(eqIndex + 1).trim();
+      const color     = this._resolveColor(rawColor);
+      return { status, rawColor, color };
+    })
+    .filter(item => item.status && item.color);
+}
+_resolveColor(rawColor) {
+  if (!rawColor) return '';
+  const trimmed = rawColor.trim().toLowerCase();
+
+  // 1. Named palette lookup
+  if (STATUS_COLOR_PALETTE[trimmed]) {
+    return STATUS_COLOR_PALETTE[trimmed];
   }
 
+  // 2. Hex color — #rgb, #rrggbb, #rrggbbaa
+  if (/^#([0-9a-f]{3,8})$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // 3. rgb() / rgba()
+  if (/^rgba?\s*\([\d\s,./]+\)$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // 4. hsl() / hsla()
+  if (/^hsla?\s*\([\d\s,%./]+\)$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // 5. CSS named colors (basic set)
+  const cssColors = [
+    'aliceblue','antiquewhite','aqua','aquamarine','azure','beige','bisque',
+    'black','blanchedalmond','blueviolet','brown','burlywood','cadetblue',
+    'chartreuse','chocolate','coral','cornflowerblue','cornsilk','crimson',
+    'cyan','darkblue','darkcyan','darkgoldenrod','darkgray','darkgreen',
+    'darkkhaki','darkmagenta','darkolivegreen','darkorange','darkorchid',
+    'darkred','darksalmon','darkseagreen','darkslateblue','darkslategray',
+    'darkturquoise','darkviolet','deeppink','deepskyblue','dimgray',
+    'dodgerblue','firebrick','floralwhite','forestgreen','fuchsia','gainsboro',
+    'gold','goldenrod','gray','greenyellow','honeydew','hotpink','indianred',
+    'indigo','ivory','khaki','lavender','lavenderblush','lawngreen',
+    'lemonchiffon','lightblue','lightcoral','lightcyan','lightgoldenrodyellow',
+    'lightgray','lightgreen','lightpink','lightsalmon','lightseagreen',
+    'lightskyblue','lightslategray','lightsteelblue','lightyellow','lime',
+    'limegreen','linen','magenta','maroon','mediumaquamarine','mediumblue',
+    'mediumorchid','mediumpurple','mediumseagreen','mediumslateblue',
+    'mediumspringgreen','mediumturquoise','mediumvioletred','midnightblue',
+    'mintcream','mistyrose','moccasin','navajowhite','oldlace','olive',
+    'olivedrab','orangered','orchid','palegoldenrod','palegreen','paleturquoise',
+    'palevioletred','papayawhip','peachpuff','peru','plum','powderblue',
+    'rosybrown','royalblue','saddlebrown','salmon','sandybrown','seagreen',
+    'seashell','sienna','silver','skyblue','slateblue','slategray','snow',
+    'springgreen','steelblue','tan','thistle','tomato','turquoise','violet',
+    'wheat','yellow','yellowgreen'
+  ];
+  if (cssColors.includes(trimmed)) {
+    return trimmed;
+  }
+
+  // Unrecognized — return empty so fallback kicks in
+  return '';
+}
+_getConfiguredColor(normalizedStatus) {
+  if (!normalizedStatus) return '';
+  const entry = this._parseStatusColorMap().find(item =>
+    normalizedStatus.toLowerCase().includes(item.status)
+  );
+  return entry?.color || '';
+}
   _normalizeTone(tone) {
     const normalized = String(tone || "")
       .trim()
@@ -3078,7 +3171,10 @@ if (!preserveScroll) {
     }
     return "";
   }
-
+_getBarColorOverride(statusValue) {
+  const color = this._getConfiguredColor((statusValue || '').toLowerCase());
+  return color ? `background-color:${color};` : '';
+}
   _matchesStatus(record, fieldName) {
     if (this.statusFilter === "all") return true;
     const value =
@@ -3582,38 +3678,45 @@ if (!preserveScroll) {
   }
 get legendItems() {
   const parsed = this._parseStatusColorMap();
-  
-  // Start with configured custom mappings
-  const items = parsed.map((item) => ({
-    label: item.status.charAt(0).toUpperCase() + item.status.slice(1),
-    tone: item.tone,
-    colorStyle: this._getSwatchColorStyle(item.tone)
-  }));
 
-  // If no custom map is set, fall back to the 4 default tones
-  if (!items.length) {
-      return [
-        {label: "Not Started", tone: "not-started", colorStyle: "background-color:#dce1e7;" },
-        { label: "New",       tone: "new", colorStyle: "background-color:#2d5a8e;" },
-        { label: "Pending",   tone: "progress",        colorStyle: "background-color:#c75c00;" },
-        { label: "Completed", tone: "complete",    colorStyle: "background-color:#1a6b2a;" }
-      ];
-    }
+  if (parsed.length) {
+    return parsed.map(item => ({
+      label:      item.status.charAt(0).toUpperCase() + item.status.slice(1),
+      tone:       item.status,
+      rawColor:   item.rawColor,
+      colorStyle: `background-color:${item.color};`
+    }));
+  }
 
-  return items;
+  // Fallback default legend when no map configured
+  return [
+    { label: 'Not Started', tone: 'not-started', colorStyle: `background-color:${STATUS_COLOR_PALETTE.blue};`   },
+    { label: 'New',         tone: 'new',         colorStyle: `background-color:${STATUS_COLOR_PALETTE.navy};`   },
+    { label: 'Pending',     tone: 'progress',    colorStyle: `background-color:${STATUS_COLOR_PALETTE.orange};` },
+    { label: 'Completed',   tone: 'complete',    colorStyle: `background-color:${STATUS_COLOR_PALETTE.green};`  }
+  ];
 }
 
 get hasLegend() {
   return this.legendItems.length > 0;
 }
 
-_getSwatchColorStyle(tone) {
-  if (tone === "not-started") return "background-color:#dce1e7;";
-  if (tone === "new") return "background-color:#2d5a8e;";
-  if (tone === "progress")    return "background-color:#c75c00;";
-  if (tone === "complete")    return "background-color:#1a6b2a;";
-  if (tone === "risk")        return "background-color:#d84315;";
-  return "background-color:#94a3b8;";
+_getSwatchColorStyle(tone, statusLabel) {
+  // Admin-configured color takes priority
+  const configured = this._getConfiguredColor((statusLabel || '').toLowerCase());
+  if (configured) return `background-color:${configured};`;
+
+  // Tone-based fallback defaults
+  const defaults = {
+    'not-started': STATUS_COLOR_PALETTE.blue,
+    'new':         STATUS_COLOR_PALETTE.navy,
+    'progress':    STATUS_COLOR_PALETTE.orange,
+    'complete':    STATUS_COLOR_PALETTE.green,
+    'risk':        STATUS_COLOR_PALETTE.red,
+    'pending':     STATUS_COLOR_PALETTE.orange,
+    'na':          STATUS_COLOR_PALETTE.grey
+  };
+  return `background-color:${defaults[tone] || '#94a3b8'};`;
 }
 get filterPanelClass() {
   return this.isFilterPanelOpen
@@ -3765,8 +3868,10 @@ _makeRow(fieldDef, isFirstRow = false) {
     operator:        operators[0]?.value || "eq",
     operatorOptions: operators,
     value:           "",
-    logic:           isFirstRow ? "" : "AND",        // First row has no logic, rest default to AND
-    logicOptions:    logicOps,
+    logicOptions: this._getLogicOperators().map(o => ({
+  ...o,
+  selected: o.value === (isFirstRow ? "" : "AND")
+})),
     isFirstRow,
     isPicklist,
     isDate,
@@ -3867,9 +3972,18 @@ handleFilterValueChange(event) {
 handleFilterLogicChange(event) {
   const rowId    = parseInt(event.currentTarget.dataset.rowid, 10);
   const newLogic = event.detail?.value || event.target?.value || "AND";
-  this.filterRows = this.filterRows.map((r) =>
-    r.id === rowId ? { ...r, logic: newLogic } : r
-  );
+  // In handleFilterLogicChange, replace the existing map:
+this.filterRows = this.filterRows.map((r) => {
+  if (r.id !== rowId) return r;
+  return {
+    ...r,
+    logic: newLogic,
+    logicOptions: this._getLogicOperators().map(o => ({
+      ...o,
+      selected: o.value === newLogic
+    }))
+  };
+});
 }
  
 // ── Apply / Clear ─────────────────────────────────────────────────────────────
@@ -3911,7 +4025,26 @@ _recordMatchesAdvancedFilters(record) {
     (r) => r.field && (r.value !== "" && r.value !== null && r.value !== undefined)
   );
   if (!active.length) return true;
-  return active.every((row) => this._evaluateFilterRow(record, row));
+
+  // Start with first row result (no logic operator on row 0)
+  let result = this._evaluateFilterRow(record, active[0]);
+
+  for (let i = 1; i < active.length; i++) {
+    const row = active[i];
+    const rowResult = this._evaluateFilterRow(record, row);
+    const logic = (row.logic || "AND").toUpperCase();
+
+    if (logic === "OR") {
+      result = result || rowResult;
+    } else if (logic === "NOT") {
+      result = result && !rowResult;
+    } else {
+      // AND (default)
+      result = result && rowResult;
+    }
+  }
+
+  return result;
 }
  
 _evaluateFilterRow(record, row) {

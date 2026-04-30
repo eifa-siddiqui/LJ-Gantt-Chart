@@ -362,6 +362,7 @@
             <template if:false={isEditMode}>
               <div class="modal-summary-grid">
                 <template for:each={selectedRecordSummary} for:item="detail">
+                  <template if:false={detail.isHidden}>
                   <div key={detail.key} class="modal-summary-item">
                     <span class="modal-summary-label">{detail.label}</span>
                     <template if:true={detail.isOwner}>
@@ -381,6 +382,7 @@
                       <span class="modal-summary-value" style={detail.valueStyle}>{detail.value}</span>
                     </template>
                   </div>
+                  </template>
                 </template>
               </div>
               <lightning-record-view-form record-id={selectedRecordId} object-api-name={selectedObjectApi}>
@@ -408,7 +410,23 @@
                     </template>
                   </div>
                 </template>
-              </lightning-record-view-form>
+             </lightning-record-view-form>
+              <!-- Fixed Owner Section -->
+              <div class="modal-owner-section">
+                <h3 class="modal-owner-section-title">OWNER</h3>
+                <div class="modal-owner-card">
+                  <template for:each={selectedRecordSummary} for:item="detail">
+                    <template if:true={detail.isOwner}>
+                      <div key={detail.key} class="modal-owner-row">
+                        <div class="owner-avatar popup-avatar" style={detail.ownerColor}>
+                          {detail.ownerInitials}
+                        </div>
+                        <span class="modal-owner-name">{detail.value}</span>
+                      </div>
+                    </template>
+                  </template>
+                </div>
+              </div>
             </template>
             <template if:true={isEditMode}>
               <lightning-record-edit-form class="modal-edit-form" record-id={selectedRecordId}
@@ -495,8 +513,8 @@
       </div>
 
       <div class="filter-panel__logic-hint">
-        Show records where <strong>all</strong> conditions are met
-      </div>
+  {filterLogicHint}
+</div>
 
       <div class="filter-panel__rows">
         <template if:true={filterRowsEmpty}>
@@ -508,7 +526,24 @@
         </template>
 
         <template for:each={filterRows} for:item="row">
-          <div key={row.id} class="filter-row" data-rowid={row.id}>
+  <!-- Logic connector shown between rows (not before the first row) -->
+  <template if:false={row.isFirstRow}>
+    <div key={row.id} class="filter-logic-connector">
+      <select class="filter-select filter-logic-connector__select"
+        data-rowid={row.id}
+        onchange={handleFilterLogicChange}
+        aria-label="Logic operator">
+        <template for:each={row.logicOptions} for:item="logicOpt">
+          <option key={logicOpt.value} value={logicOpt.value}
+            selected={logicOpt.selected}>
+            {logicOpt.label}
+          </option>
+        </template>
+      </select>
+    </div>
+  </template>
+
+  <div key={row.id} class="filter-row" data-rowid={row.id}>
 
             <span class="filter-row__num">{row.id}</span>
 

@@ -49,6 +49,9 @@
             <property name="level3Section2Name" type="String" label="L3: Section 2 Name" />
             <property name="level3Section2Fields" type="String" label="L3: Section 2 Fields (Comma Separated)" />
 
+            <property name="statusColorMap" type="String" label="4. Status Color Map"
+  description="Map status values to colors. Use named colors (red, orange, yellow, green, blue, navy, purple, pink, teal, grey) OR hex codes (#ff0000) OR rgb values (rgb(255,0,0)). Format: StatusValue=color. Example: New=blue,Pending=#f97316,Completed=green,N/A=grey" />
+
         </targetConfig>
     </targetConfigs>
 

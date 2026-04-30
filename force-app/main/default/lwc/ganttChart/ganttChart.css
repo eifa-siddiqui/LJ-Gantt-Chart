@@ -2109,3 +2109,50 @@
   color: #64748b;
   font-style: italic;
 }
+.filter-logic-connector {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 4px 36px; /* aligns under the numbered badge */
+}
+
+.filter-logic-connector__select {
+  width: 120px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0055b3;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+.modal-owner-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-owner-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0055b3;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+}
+
+.modal-owner-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.modal-owner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-owner-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
