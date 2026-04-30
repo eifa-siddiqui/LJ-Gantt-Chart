@@ -1660,3 +1660,452 @@
   border-radius: 3px;
   flex-shrink: 0;
 }
+/* ── Filter Toggle Button ─────────────────────────────────────────────────── */
+.filter-toggle-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  height: 32px;
+  border: 1px solid #d8dde6;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.filter-toggle-btn:hover {
+  background: #f3f3f3;
+  border-color: #b0b7c3;
+}
+.filter-toggle-btn--active {
+  background: #eaf4ff;
+  border-color: #0070d2;
+  color: #0055b3;
+}
+.filter-toggle-btn--active:hover {
+  background: #d8eeff;
+}
+.filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #0070d2;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+ 
+/* ── Backdrop ─────────────────────────────────────────────────────────────── */
+.filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8990;
+  background: transparent;
+}
+ 
+/* ── Panel Shell ──────────────────────────────────────────────────────────── */
+/*
+  SF filter panel is a right-side drawer / popover with a white card look.
+  Width matches the screenshot (~480–520px), shadow is a soft elevation.
+*/
+.filter-panel {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 9000;
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 110px);
+  background: #fff;
+  border: 1px solid #dddbda;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Hidden by default */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.filter-panel.filter-panel-open {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateY(0);
+}
+ 
+/* ── Panel Header — "Filters  ×" ──────────────────────────────────────────── */
+.filter-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  background: #fff;
+}
+.filter-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #181818;
+  letter-spacing: -0.01em;
+}
+.filter-panel__title-icon {
+  color: #3e3e3c;
+}
+.filter-panel__count-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #0070d2;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.filter-panel__close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #514f4d;
+  transition: background 0.1s;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+.filter-panel__close-btn:hover {
+  background: #f3f2f2;
+  color: #181818;
+}
+ 
+/* ── Logic hint ───────────────────────────────────────────────────────────── */
+/*  "Show records where all conditions are met"  */
+.filter-panel__logic-hint {
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: #514f4d;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+  flex-shrink: 0;
+}
+.filter-panel__logic-hint strong {
+  color: #0070d2;
+  font-weight: 700;
+}
+ 
+/* ── Scrollable rows container ────────────────────────────────────────────── */
+.filter-panel__rows {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+}
+.filter-panel__rows::-webkit-scrollbar { width: 4px; }
+.filter-panel__rows::-webkit-scrollbar-track { background: transparent; }
+.filter-panel__rows::-webkit-scrollbar-thumb { background: #c8cdd6; border-radius: 2px; }
+ 
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.filter-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  color: #b0b7c3;
+  text-align: center;
+  gap: 5px;
+  font-size: 13px;
+}
+.filter-panel__empty p { margin: 0; }
+.filter-panel__empty-sub { color: #9ba5b4; font-size: 12px; }
+ 
+/* ── Individual filter row ────────────────────────────────────────────────── */
+/*
+  Matches the SF screenshot: number badge | Field combo | Operator combo | Value input | × button
+  All on one horizontal line with column labels above.
+*/
+.filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 10px;
+  background: #f3f2f2;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  animation: filterRowIn 0.12s ease;
+}
+@keyframes filterRowIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+ 
+/* Number badge — blue circle like SF */
+.filter-row__num {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0070d2;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 1px;
+  align-self: flex-end;
+}
+ 
+/* Column wrappers */
+.filter-row__field    { flex: 2 1 140px; min-width: 100px; }
+.filter-row__operator { flex: 1.5 1 110px; min-width: 80px; }
+.filter-row__value    { flex: 2 1 140px; min-width: 100px; }
+ 
+/* Column header labels — uppercase, small, grey like SF */
+.filter-row__label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #706e6b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+ 
+/* Remove (×) button */
+.filter-row__remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #706e6b;
+  cursor: pointer;
+  border-radius: 4px;
+  align-self: flex-end;
+  margin-bottom: 1px;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+.filter-row__remove:hover {
+  background: #fde8e8;
+  color: #c23934;
+}
+ 
+/* ── Select / Input controls ──────────────────────────────────────────────── */
+/*  SF uses a standard rounded-rect combobox / input */
+.filter-select,
+.filter-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  font-size: 13px;
+  color: #181818;
+  background: #fff;
+  border: 1px solid #dddbda;
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  /* custom chevron */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23706e6b' d='M8 10.5L3 5.5h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px;
+}
+/* Value input doesn't need the chevron */
+.filter-input {
+  padding: 0 10px;
+  background-image: none;
+}
+.filter-select:focus,
+.filter-input:focus {
+  border-color: #1b96ff;
+  box-shadow: 0 0 0 3px rgba(27, 150, 255, 0.2);
+}
+.filter-input::placeholder {
+  color: #aeaeae;
+}
+.filter-input--date {
+  padding: 0 8px;
+}
+ 
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+/*
+  SF layout: [ + Add Filter ]  (left)       [ Clear All ]  [ Apply ] (right)
+  Matches screenshot exactly — no top border initially, subtle separator line.
+*/
+.filter-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 14px;
+  border-top: 1px solid #e0e0e0;
+  background: #fff;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.filter-panel__footer-actions {
+  display: flex;
+  gap: 8px;
+}
+ 
+/* ── Footer buttons ───────────────────────────────────────────────────────── */
+.filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: background 0.13s, border-color 0.13s, color 0.13s, box-shadow 0.13s;
+}
+.filter-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+ 
+/* "+ Add Filter" — blue text, white background, blue border  (SF style) */
+.filter-btn--add {
+  background: #fff;
+  border-color: #0070d2;
+  color: #0070d2;
+}
+.filter-btn--add:hover:not(:disabled) {
+  background: #eaf4ff;
+}
+ 
+/* "Clear All" — neutral outlined */
+.filter-btn--clear {
+  background: #fff;
+  border-color: #dddbda;
+  color: #514f4d;
+}
+.filter-btn--clear:hover:not(:disabled) {
+  background: #f3f2f2;
+  border-color: #b0b7c3;
+  color: #181818;
+}
+ 
+/* "Apply" — solid blue, SF brand button */
+.filter-btn--apply {
+  background: #0070d2;
+  border-color: #0070d2;
+  color: #fff;
+  min-width: 72px;
+  justify-content: center;
+}
+.filter-btn--apply:hover:not(:disabled) {
+  background: #0058a9;
+  border-color: #0058a9;
+  box-shadow: 0 2px 6px rgba(0, 112, 210, 0.3);
+}
+ 
+/* ── Fullscreen adjustment ────────────────────────────────────────────────── */
+.is-fullscreen .filter-panel {
+  position: fixed;
+  top: 52px;
+  right: 12px;
+  max-height: calc(100vh - 72px);
+}
+/* ── Filter Logic Section ─────────────────────────── */
+.filter-logic-section {
+  margin-top: 12px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.filter-logic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.filter-logic-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.filter-logic-clear-btn {
+  font-size: 11px;
+  color: #0055b3;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.filter-logic-clear-btn:hover { text-decoration: underline; }
+
+.filter-logic-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;  /* monospace mirrors Salesforce's style */
+  color: #0f172a;
+  background: #f8fafc;
+  transition: border-color 0.15s;
+}
+.filter-logic-input:focus {
+  outline: none;
+  border-color: #0055b3;
+  background: #fff;
+}
+
+.filter-logic-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #c0392b;
+}
+
+.filter-logic-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}

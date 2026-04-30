@@ -272,4 +272,78 @@ public with sharing class DynamicGanttController {
         }
         return options;
     }
+/**
+ * Returns field metadata for all fields on the given sObject that are
+ * suitable for filtering: accessible, not compound, not encrypted.
+ */
+@AuraEnabled(cacheable=true)
+public static List<Map<String, Object>> getObjectFields(String objectName) {
+    List<Map<String, Object>> result = new List<Map<String, Object>>();
+    if (String.isBlank(objectName)) return result;
+
+    try {
+        Schema.SObjectType sObjType = Schema.getGlobalDescribe().get(objectName);
+        if (sObjType == null) return result;
+
+        Map<String, Schema.SObjectField> fieldMap = sObjType.getDescribe().fields.getMap();
+
+        for (String fieldName : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(fieldName).getDescribe();
+
+            // Skip non-accessible, formula-hidden, encrypted and compound address/geolocation fields
+            if (!dfr.isAccessible()) continue;
+            if (dfr.isEncrypted()) continue;
+
+            Schema.DisplayType dt = dfr.getType();
+
+            // Skip compound / binary / base64 types that can't be filtered sensibly
+            if (dt == Schema.DisplayType.BASE64) continue;
+            if (dt == Schema.DisplayType.ADDRESS) continue;
+            if (dt == Schema.DisplayType.ANYTYPE) continue;
+
+            String typeStr = dt.name().toLowerCase(); // 'string', 'date', 'datetime', 'picklist', etc.
+
+            Map<String, Object> fieldInfo = new Map<String, Object>{
+                'label'  => dfr.getLabel(),
+                'value'  => dfr.getName(),
+                'type'   => typeStr
+            };
+
+            // For picklist / multipicklist fields attach the picklist values
+            if (dt == Schema.DisplayType.PICKLIST || dt == Schema.DisplayType.MULTIPICKLIST) {
+                List<Map<String, String>> plVals = new List<Map<String, String>>();
+                for (Schema.PicklistEntry ple : dfr.getPicklistValues()) {
+                    if (ple.isActive()) {
+                        plVals.add(new Map<String, String>{
+                            'label' => ple.getLabel(),
+                            'value' => ple.getValue()
+                        });
+                    }
+                }
+                fieldInfo.put('options', plVals);
+            }
+
+            result.add(fieldInfo);
+        }
+
+        // Sort alphabetically by label on the server side
+        result.sort(new FieldLabelComparator());
+
+    } catch (Exception ex) {
+        throw new AuraHandledException('Error fetching fields for ' + objectName + ': ' + ex.getMessage());
+    }
+
+    return result;
+}
+
+// Inner comparator — place this as a nested/inner class inside DynamicGanttController
+private class FieldLabelComparator implements Comparator<Map<String, Object>> {
+    public Integer compare(Map<String, Object> a, Map<String, Object> b) {
+        String la = (String) a.get('label');
+        String lb = (String) b.get('label');
+        if (la == null) la = '';
+        if (lb == null) lb = '';
+        return la.compareTo(lb);
+    }
+}
 }

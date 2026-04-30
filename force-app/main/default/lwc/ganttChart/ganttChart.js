@@ -4,6 +4,7 @@ import getAvailableUsers from "@salesforce/apex/DynamicGanttController.getAvaila
 import getStatusOptions from "@salesforce/apex/DynamicGanttController.getStatusOptions";
 import getOrgToday from "@salesforce/apex/DynamicGanttController.getOrgToday";
 import updateRecordFields from "@salesforce/apex/DynamicGanttController.updateRecordFields";
+import getObjectFields from "@salesforce/apex/DynamicGanttController.getObjectFields";
 
 const TIMELINE_CELL_WIDTH_PX = 130;
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -93,6 +94,13 @@ export default class DynamicGantt extends LightningElement {
   @track statusChoices = [];
   @track tooltip = { visible: false, title: "", details: [], style: "" };
   @track selectedItemCache = null;
+  
+  @track isFilterPanelOpen   = false;
+  @track filterRows          = [];
+  @track availableFilterFields = [];
+  @track activeFilterCount   = 0;
+  
+  _filterRowCounter          = 0;
 
   startDateLimit;
   endDateLimit;
@@ -606,39 +614,43 @@ if (!preserveScroll) {
   }
 
   loadLevel1() {
-    if (!this.level1Object) {
-      this.errorMessage =
-        "Level 1 Object is not configured. Please set it in component properties.";
-      return;
-    }
+  if (!this.level1Object) {
+    this.errorMessage = "Level 1 Object is not configured.";
+    return;
+  }
 
-    this.isLoading = true;
-    this.errorMessage = "";
+  this.isLoading = true;
+  this.errorMessage = "";
 
-    const fields = [
-      this.level1DisplayField,
-      this.level1StartDate,
-      this.level1EndDate,
-      this.level1PlannedStartDate,
-      this.level1PlannedEndDate,
-      this.level1ActualStartDate,
-      this.level1ActualEndDate,
-      this.level1TargetEndDate,
-      this.level1Progress
-    ]
-      .filter(Boolean)
-      .join(",");
+  // Merge configured fields + any active filter fields
+  const filterFields = this._getActiveFilterFieldNames();
+  const fields = [
+    this.level1DisplayField,
+    this.level1StartDate,
+    this.level1EndDate,
+    this.level1PlannedStartDate,
+    this.level1PlannedEndDate,
+    this.level1ActualStartDate,
+    this.level1ActualEndDate,
+    this.level1TargetEndDate,
+    this.level1Progress,
+    ...filterFields              // ← ADD THIS
+  ].filter(Boolean);
 
-    getGanttData({
-  objectName: this.level1Object,
-  fields,
-  lookupField: "",
-  parentId: "",
-  statusField: this.level1Progress || "",
-  startDateField: this.level1StartDate || "",
-  searchTerm: "",
-  specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
-})
+  // Deduplicate
+  const uniqueFields = [...new Set(fields)].join(",");
+
+  getGanttData({
+    objectName: this.level1Object,
+    fields: uniqueFields,        // ← use uniqueFields
+    lookupField: "",
+    parentId: "",
+    statusField: this.level1Progress || "",
+    startDateField: this.level1StartDate || "",
+    searchTerm: "",
+    specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
+  })
+  // ... rest unchanged
   .then((result) => {
     this.sourceLevel1Data = (result || [])
       .map((item) => this._wrapL1(item))
@@ -679,21 +691,22 @@ if (!preserveScroll) {
   });
 }
   _loadLevel2(parentId) {
-    const fields = [
-      this.level2SidebarFields,
-      this.level2Section1Fields,
-      this.level2Section2Fields,
-      this.level2StartDate,
-      this.level2EndDate,
-      this.level2PlannedStartDate,
-      this.level2PlannedEndDate,
-      this.level2ActualStartDate,
-      this.level2ActualEndDate,
-      this.level2TargetEndDate,
-      this.level2Progress
-    ]
-      .filter(Boolean)
-      .join(",");
+  const filterFields = this._getActiveFilterFieldNames();
+  const fields = [
+    this.level2SidebarFields,
+    this.level2Section1Fields,
+    this.level2Section2Fields,
+    this.level2StartDate,
+    this.level2EndDate,
+    this.level2PlannedStartDate,
+    this.level2PlannedEndDate,
+    this.level2ActualStartDate,
+    this.level2ActualEndDate,
+    this.level2TargetEndDate,
+    this.level2Progress,
+    ...filterFields              // ← ADD THIS
+  ].filter(Boolean).join(",");
+  // ... rest unchanged
 
     return getGanttData({
       objectName: this.level2Object,
@@ -1496,7 +1509,7 @@ handleItemClick(event) {
   event.stopPropagation();
   const val = (event.target.value || "").trim().toLowerCase();
   this.searchTerm = val;
-  this._refreshView();
+  this._prepareHierarchyForQuery().then(() => this._refreshView());
 }
 
 handleSearchClear(event) {
@@ -1504,9 +1517,7 @@ handleSearchClear(event) {
   event.preventDefault();
   this.searchTerm = "";
   const searchInput = this.template.querySelector(".filter-search");
-  if (searchInput) {
-    searchInput.value = "";
-  }
+  if (searchInput) searchInput.value = "";
   this._refreshView();
 }
 
@@ -2308,74 +2319,66 @@ handleSearchClear(event) {
       });
   }
 
-  _reloadChartData(preserveScroll = false){
-    // Reload the chart data from Salesforce to ensure bars reflect updated dates
-    if (!this.level1Object) {
-      return;
+  _reloadChartData(preserveScroll = false) {
+  if (!this.level1Object) return;
+
+  const filterFields = this._getActiveFilterFieldNames();
+  const fields = [
+    this.level1DisplayField,
+    this.level1StartDate,
+    this.level1EndDate,
+    this.level1PlannedStartDate,
+    this.level1PlannedEndDate,
+    this.level1ActualStartDate,
+    this.level1ActualEndDate,
+    this.level1TargetEndDate,
+    this.level1Progress,
+    ...filterFields              // ← ADD THIS
+  ].filter(Boolean);
+
+  const uniqueFields = [...new Set(fields)].join(",");
+
+  getGanttData({
+    objectName: this.level1Object,
+    fields: uniqueFields,        // ← use uniqueFields
+    // ... rest unchanged
+    lookupField: "",
+    parentId: "",
+    statusField: this.level1Progress || "",
+    startDateField: this.level1StartDate || "",
+    searchTerm: this.searchTerm || "",
+    specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
+  })
+  .then((result) => {
+    this.sourceLevel1Data = (result || []).map(item => this._wrapL1(item));
+
+    if (this.supportsLevel2 && expandedL1Ids.size > 0) {
+      const l2Loads = this.sourceLevel1Data
+        .filter(item => expandedL1Ids.has(item.record.Id))
+        .map((item, _) => {
+          const idx = this.sourceLevel1Data.findIndex(
+            r => r.record.Id === item.record.Id
+          );
+          return this._loadLevel2(item.record.Id).then(children => {
+            const updated = [...this.sourceLevel1Data];
+            updated[idx] = {
+              ...updated[idx],
+              _l2Loaded: true,
+              expanded: true,
+              rowClass: "l1-item expanded-row",
+              children
+            };
+            this.sourceLevel1Data = updated;
+          });
+        });
+      return Promise.all(l2Loads);
     }
-
-    const fields = [
-      this.level1DisplayField,
-      this.level1StartDate,
-      this.level1EndDate,
-      this.level1PlannedStartDate,
-      this.level1PlannedEndDate,
-      this.level1ActualStartDate,
-      this.level1ActualEndDate,
-      this.level1TargetEndDate,
-      this.level1Progress
-    ]
-      .filter(Boolean)
-      .join(",");
-
-    getGanttData({
-      objectName: this.level1Object,
-      fields,
-      lookupField: "",
-      parentId: "",
-      statusField: this.level1Progress || "",
-      startDateField: this.level1StartDate || "",
-      searchTerm: this.searchTerm || "",
-      specificRecordId: this.isCurrentRecordScope ? this.recordId : ""
-    })
-      .then((result) => {
-        // Update sourceLevel1Data with fresh records
-        this.sourceLevel1Data = (result || []).map((item) =>
-          this._wrapL1(item)
-        );
-
-        // If level 2 was previously expanded, reload it
-        if (this.supportsLevel2) {
-          const l2Loads = this.sourceLevel1Data
-            .filter(
-              (item) =>
-                item._l2Loaded ||
-                (item.expanded && item.children && item.children.length > 0)
-            )
-            .map((item, idx) => {
-              return this._loadLevel2(item.record.Id).then((children) => {
-                const updated = [...this.sourceLevel1Data];
-                updated[idx] = {
-                  ...updated[idx],
-                  _l2Loaded: true,
-                  children
-                };
-                this.sourceLevel1Data = updated;
-              });
-            });
-
-          if (l2Loads.length > 0) {
-            return Promise.all(l2Loads);
-          }
-        }
-      })
-      .then(() => {
-  this._refreshView(preserveScroll);
-})
-      .catch((error) => {
-        this.errorMessage = `Error reloading chart data: ${this._msg(error)}`;
-      });
-  }
+  })
+  .then(() => this._refreshView(preserveScroll))
+  .catch(error => {
+    this.errorMessage = `Error reloading chart data: ${this._msg(error)}`;
+  });
+}
 
   _applyRecordFieldValues(recordId, level, values) {
     const applyToRecord = (entry) => {
@@ -2715,8 +2718,9 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
       const isSearchMatch = this._nameIncludes(item.record.Name, searchTerm);
       if (isSearchMatch && searchTerm) matchCount += 1;
       const visible =
-        this._matchesStatus(item.record, this.level3Progress) &&
-        this._matchesOwner(item);
+      this._matchesStatus(item.record, this.level3Progress) &&
+      this._matchesOwner(item) &&
+      this._recordMatchesAdvancedFilters(item.record);
       if (!visible) {
         return null;
       }
@@ -2733,8 +2737,9 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
       const isSearchMatch = this._nameIncludes(item.record.Name, searchTerm);
       if (isSearchMatch && searchTerm) matchCount += 1;
       const directVisible =
-        this._matchesStatus(item.record, this.level2Progress) &&
-        this._matchesOwner(item);
+      this._matchesStatus(item.record, this.level2Progress) &&
+      this._matchesOwner(item) &&
+      this._recordMatchesAdvancedFilters(item.record);
       if (!directVisible && children.length === 0) {
         return null;
       }
@@ -2766,8 +2771,9 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
         const isSearchMatch = this._nameIncludes(item.record.Name, searchTerm);
         if (isSearchMatch && searchTerm) matchCount += 1;
         const directVisible =
-          this._matchesStatus(item.record, this.level1Progress) &&
-          this._matchesOwner(item);
+      this._matchesStatus(item.record, this.level1Progress) &&
+      this._matchesOwner(item) &&
+      this._recordMatchesAdvancedFilters(item.record);
         if (!directVisible && children.length === 0) {
           return null;
         }
@@ -3608,5 +3614,404 @@ _getSwatchColorStyle(tone) {
   if (tone === "complete")    return "background-color:#1a6b2a;";
   if (tone === "risk")        return "background-color:#d84315;";
   return "background-color:#94a3b8;";
+}
+get filterPanelClass() {
+  return this.isFilterPanelOpen
+    ? "filter-panel filter-panel-open"
+    : "filter-panel";
+}
+ 
+get filterButtonClass() {
+  return this.activeFilterCount > 0
+    ? "filter-toggle-btn filter-toggle-btn--active"
+    : "filter-toggle-btn";
+}
+ 
+get filterBadgeLabel() {
+  return this.activeFilterCount > 0 ? String(this.activeFilterCount) : "";
+}
+ 
+get hasActiveFilters() {
+  return this.activeFilterCount > 0;
+}
+ 
+get filterRowsEmpty() {
+  return this.filterRows.length === 0;
+}
+ 
+get filterLogicHint() {
+  const active = this.filterRows.filter(
+    r => r.field && r.value !== "" && r.value !== null && r.value !== undefined
+  );
+  if (active.length === 0) return "No filters applied";
+  if (active.length === 1) return "Showing records where condition is met";
+  
+  // Build a readable hint from the logic configuration
+  let hint = "Show records where ";
+  const parts = active.map((r, idx) => {
+    if (idx === 0) return "condition 1";
+    const op = r.logic === "OR" ? "OR" : r.logic === "NOT" ? "NOT" : "AND";
+    return `${op} condition ${idx + 1}`;
+  });
+  hint += parts.join(" ");
+  return hint;
+}
+
+// ── Field metadata loader ─────────────────────────────────────────────────────
+
+_loadFilterFields() {
+  if (!this.level1Object) return;
+  // Already loaded — skip
+  if (this.availableFilterFields.length > 0) return;
+ 
+  getObjectFields({ objectName: this.level1Object })
+    .then((result) => {
+      this.availableFilterFields = (result || []).map((f) => ({
+        label:    f.label,
+        value:    f.value,
+        type:     f.type  || "string",
+        options:  f.options || []
+      }));
+    })
+    .catch(() => {
+      // Graceful fallback — leave availableFilterFields empty; panel shows a message
+      this.availableFilterFields = [];
+    });
+}
+ 
+// ── Operator catalogue (mirrors SF list view) ─────────────────────────────────
+ 
+_getOperatorsForType(type) {
+  const text = [
+    { label: "equals",            value: "eq" },
+    { label: "not equal to",      value: "neq" },
+    { label: "contains",          value: "contains" },
+    { label: "does not contain",  value: "notcontains" },
+    { label: "starts with",       value: "startswith" }
+  ];
+  const numeric = [
+    { label: "equals",            value: "eq" },
+    { label: "not equal to",      value: "neq" },
+    { label: "greater than",      value: "gt" },
+    { label: "greater or equal",  value: "gte" },
+    { label: "less than",         value: "lt" },
+    { label: "less or equal",     value: "lte" }
+  ];
+  const dateOps = [
+    { label: "equals",            value: "eq" },
+    { label: "not equal to",      value: "neq" },
+    { label: "greater than",      value: "gt" },
+    { label: "less than",         value: "lt" },
+    { label: "last N days",       value: "lastNDays" },
+    { label: "next N days",       value: "nextNDays" }
+  ];
+  const bool = [
+    { label: "equals",            value: "eq" }
+  ];
+  const picklist = [
+    { label: "equals",            value: "eq" },
+    { label: "not equal to",      value: "neq" }
+  ];
+  const t = (type || "").toLowerCase();
+  if (t === "date" || t === "datetime")                               return dateOps;
+  if (["integer","double","currency","percent","number"].includes(t)) return numeric;
+  if (t === "boolean" || t === "checkbox")                            return bool;
+  if (t === "picklist" || t === "multipicklist")                      return picklist;
+  return text;
+}
+ 
+// ── Type helpers ──────────────────────────────────────────────────────────────
+ 
+_isPicklistType(type) {
+  return ["picklist", "multipicklist"].includes((type || "").toLowerCase());
+}
+_isDateType(type) {
+  return ["date", "datetime"].includes((type || "").toLowerCase());
+}
+_isBooleanType(type) {
+  return ["boolean", "checkbox"].includes((type || "").toLowerCase());
+}
+_isNumericType(type) {
+  return ["integer","double","currency","percent","number"].includes((type || "").toLowerCase());
+}
+ 
+// ── Logic operators ──────────────────────────────────────────────────────────
+ 
+_getLogicOperators() {
+  return [
+    { label: "AND (&&)",  value: "AND" },
+    { label: "OR (||)",   value: "OR" },
+    { label: "NOT (!)",   value: "NOT" }
+  ];
+}
+ 
+// ── Row factory ───────────────────────────────────────────────────────────────
+ 
+_makeRow(fieldDef, isFirstRow = false) {
+  // fieldDef may be undefined when availableFilterFields is still loading
+  const fd       = fieldDef || this.availableFilterFields[0] || { value: "", type: "string", options: [] };
+  const operators = this._getOperatorsForType(fd.type);
+  const logicOps  = this._getLogicOperators();
+  const isPicklist = this._isPicklistType(fd.type);
+  const isDate     = this._isDateType(fd.type);
+  const isBoolean  = this._isBooleanType(fd.type);
+  // Sequential display number — recomputed fresh in _rebuildRowNumbers()
+  return {
+    id:              ++this._filterRowCounter,
+    displayNum:      this.filterRows.length + 1,   // will be normalised
+    field:           fd.value,
+    fieldType:       fd.type,
+    fieldOptions:    fd.options || [],
+    operator:        operators[0]?.value || "eq",
+    operatorOptions: operators,
+    value:           "",
+    logic:           isFirstRow ? "" : "AND",        // First row has no logic, rest default to AND
+    logicOptions:    logicOps,
+    isFirstRow,
+    isPicklist,
+    isDate,
+    isBoolean,
+    isText: !isPicklist && !isDate && !isBoolean
+  };
+}
+ 
+/** Reassign sequential 1-based display numbers after any add/remove */
+_rebuildRowNumbers() {
+  this.filterRows = this.filterRows.map((r, i) => ({ ...r, displayNum: i + 1 }));
+}
+ 
+// ── Panel open / close ────────────────────────────────────────────────────────
+ 
+toggleFilterPanel() {
+  this.isFilterPanelOpen = !this.isFilterPanelOpen;
+  if (this.isFilterPanelOpen) {
+    // Load fields lazily on first open
+    this._loadFilterFields();
+    // Start with one empty row if the panel has none
+    if (this.filterRows.length === 0) {
+      this._addFilterRow();
+    }
+  }
+}
+ 
+closeFilterPanel() {
+  this.isFilterPanelOpen = false;
+}
+ 
+// ── Row management ────────────────────────────────────────────────────────────
+ 
+handleAddFilterRow() {
+  this._addFilterRow();
+}
+ 
+_addFilterRow() {
+  const fd = this.availableFilterFields[0];
+  const isFirstRow = this.filterRows.length === 0;
+  this.filterRows = [...this.filterRows, this._makeRow(fd, isFirstRow)];
+  this._rebuildRowNumbers();
+}
+ 
+handleRemoveFilterRow(event) {
+  const rowId = parseInt(event.currentTarget.dataset.rowid, 10);
+  this.filterRows = this.filterRows.filter((r) => r.id !== rowId);
+  this._rebuildRowNumbers();
+  this._applyAdvancedFilters();
+}
+ 
+// ── Field / Operator / Value changes ──────────────────────────────────────────
+ 
+handleFilterFieldChange(event) {
+  const rowId    = parseInt(event.currentTarget.dataset.rowid, 10);
+  const newField = event.detail?.value || event.target?.value || "";
+  const fd       = this.availableFilterFields.find((f) => f.value === newField)
+                    || { value: newField, type: "string", options: [] };
+  const operators  = this._getOperatorsForType(fd.type);
+  const isPicklist = this._isPicklistType(fd.type);
+  const isDate     = this._isDateType(fd.type);
+  const isBoolean  = this._isBooleanType(fd.type);
+ 
+  this.filterRows = this.filterRows.map((r) => {
+    if (r.id !== rowId) return r;
+    return {
+      ...r,
+      field:           fd.value,
+      fieldType:       fd.type,
+      fieldOptions:    fd.options || [],
+      operator:        operators[0]?.value || "eq",
+      operatorOptions: operators,
+      value:           "",
+      isPicklist,
+      isDate,
+      isBoolean,
+      isText: !isPicklist && !isDate && !isBoolean
+    };
+  });
+}
+ 
+handleFilterOperatorChange(event) {
+  const rowId = parseInt(event.currentTarget.dataset.rowid, 10);
+  const newOp = event.detail?.value || event.target?.value || "eq";
+  this.filterRows = this.filterRows.map((r) =>
+    r.id === rowId ? { ...r, operator: newOp } : r
+  );
+}
+ 
+handleFilterValueChange(event) {
+  const rowId  = parseInt(event.currentTarget.dataset.rowid, 10);
+  const newVal = event.detail?.value ?? event.target?.value ?? "";
+  this.filterRows = this.filterRows.map((r) =>
+    r.id === rowId ? { ...r, value: newVal } : r
+  );
+}
+
+handleFilterLogicChange(event) {
+  const rowId    = parseInt(event.currentTarget.dataset.rowid, 10);
+  const newLogic = event.detail?.value || event.target?.value || "AND";
+  this.filterRows = this.filterRows.map((r) =>
+    r.id === rowId ? { ...r, logic: newLogic } : r
+  );
+}
+ 
+// ── Apply / Clear ─────────────────────────────────────────────────────────────
+ 
+applyFilters() {
+  const active = this.filterRows.filter(
+    r => r.field && r.value !== "" && r.value !== null && r.value !== undefined
+  );
+  this.activeFilterCount = active.length;
+  
+  // Reload data so filter fields are included in SOQL
+  this._reloadChartData(true);
+}
+
+clearAllFilters() {
+  this.filterRows        = [];
+  this.activeFilterCount = 0;
+  this._filterRowCounter = 0;
+  this._refreshView();   // no reload needed — just unfilter what's already loaded
+}
+ 
+// ── Core filter logic ─────────────────────────────────────────────────────────
+ 
+_applyAdvancedFilters() {
+  const active = this.filterRows.filter(
+    (r) => r.field && r.value !== "" && r.value !== null && r.value !== undefined
+  );
+  this.activeFilterCount = active.length;
+  // Ensure L2/L3 children are loaded before filtering
+  this._prepareHierarchyForQuery().then(() => this._refreshView());
+}
+ 
+/**
+ * Returns true when the record satisfies ALL active filter rows (AND logic).
+ * Called inside _refreshView() for every item at every level.
+ */
+_recordMatchesAdvancedFilters(record) {
+  const active = this.filterRows.filter(
+    (r) => r.field && (r.value !== "" && r.value !== null && r.value !== undefined)
+  );
+  if (!active.length) return true;
+  return active.every((row) => this._evaluateFilterRow(record, row));
+}
+ 
+_evaluateFilterRow(record, row) {
+  if (!record) return false;
+  
+  // Case-insensitive field lookup — handles API name mismatches
+  let raw = record[row.field];
+  if (raw === undefined) {
+    const keyLower = (row.field || "").toLowerCase();
+    const matchedKey = Object.keys(record).find(
+      k => k.toLowerCase() === keyLower
+    );
+    if (matchedKey) raw = record[matchedKey];
+  }
+  
+  // If still undefined, this field isn't on the record at all
+  if (raw === undefined || raw === null) return false;
+
+  const operator = row.operator;
+  // ... rest of your existing logic unchanged
+ 
+  // ── Boolean ──────────────────────────────────────────────────────────────
+  if (row.isBoolean || row.fieldType === "boolean" || row.fieldType === "checkbox") {
+    const boolVal = row.value === "true" || row.value === true;
+    const recBool = raw === true || raw === "true";
+    return operator === "neq" ? recBool !== boolVal : recBool === boolVal;
+  }
+ 
+  // ── Date / DateTime ───────────────────────────────────────────────────────
+  if (row.isDate || this._isDateType(row.fieldType)) {
+    const recDate = this.parseDate(raw);
+    if (!recDate) return false;
+ 
+    if (operator === "lastNDays" || operator === "nextNDays") {
+      const n = parseInt(row.value, 10);
+      if (Number.isNaN(n)) return false;
+      const today = this._getCurrentDate();
+      const pivot = new Date(today);
+      pivot.setDate(pivot.getDate() + (operator === "nextNDays" ? n : -n));
+      return operator === "lastNDays"
+        ? recDate >= pivot && recDate <= today
+        : recDate >= today && recDate <= pivot;
+    }
+ 
+    const filterDate = this.parseDate(row.value);
+    if (!filterDate) return false;
+    const rd = recDate.getTime();
+    const fd = filterDate.getTime();
+    if (operator === "eq")  return rd === fd;
+    if (operator === "neq") return rd !== fd;
+    if (operator === "gt")  return rd > fd;
+    if (operator === "gte") return rd >= fd;
+    if (operator === "lt")  return rd < fd;
+    if (operator === "lte") return rd <= fd;
+    return false;
+  }
+ 
+  // ── Numeric ───────────────────────────────────────────────────────────────
+  if (this._isNumericType(row.fieldType)) {
+    const recNum = parseFloat(raw);
+    const filNum = parseFloat(row.value);
+    if (Number.isNaN(recNum) || Number.isNaN(filNum)) return false;
+    if (operator === "eq")  return recNum === filNum;
+    if (operator === "neq") return recNum !== filNum;
+    if (operator === "gt")  return recNum > filNum;
+    if (operator === "gte") return recNum >= filNum;
+    if (operator === "lt")  return recNum < filNum;
+    if (operator === "lte") return recNum <= filNum;
+    return false;
+  }
+ 
+  // ── Picklist / Multipicklist ───────────────────────────────────────────────
+  if (row.isPicklist || this._isPicklistType(row.fieldType)) {
+    const recStr = String(raw ?? "");
+    const filStr = String(row.value ?? "");
+    if (row.fieldType === "multipicklist") {
+      const recVals = recStr.split(";").map((v) => v.trim().toLowerCase());
+      return operator === "neq"
+        ? !recVals.includes(filStr.toLowerCase())
+        : recVals.includes(filStr.toLowerCase());
+    }
+    return operator === "neq"
+      ? recStr.toLowerCase() !== filStr.toLowerCase()
+      : recStr.toLowerCase() === filStr.toLowerCase();
+  }
+ 
+  // ── Text (default) ────────────────────────────────────────────────────────
+  const recStr = String(raw ?? "").toLowerCase();
+  const filStr = String(row.value ?? "").toLowerCase();
+  if (operator === "eq")          return recStr === filStr;
+  if (operator === "neq")         return recStr !== filStr;
+  if (operator === "contains")    return recStr.includes(filStr);
+  if (operator === "notcontains") return !recStr.includes(filStr);
+  if (operator === "startswith")  return recStr.startsWith(filStr);
+  return true;
+}
+_getActiveFilterFieldNames() {
+  return this.filterRows
+    .filter(r => r.field)
+    .map(r => r.field)
+    .filter(Boolean);
 }
 }
