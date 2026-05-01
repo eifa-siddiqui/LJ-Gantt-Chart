@@ -190,7 +190,13 @@ closeExportMenu() {
       !!this.level3ParentLookup
     );
   }
+get selectedRecordOverdueRisk() {
+  return this.selectedItemCache?.overdueRisk || null;
+}
 
+get isSelectedRecordOverdue() {
+  return !!this.selectedItemCache?.overdueRisk;
+}
   get disableHierarchyActions() {
     return !this.supportsLevel2 || !this.hasData;
   }
@@ -860,6 +866,8 @@ if (!preserveScroll) {
         this.calculateDuration(actualStartDate, barEndDate),
         progress
       ),
+      overdueRisk: this._buildOverdueRisk(item.record, 1),
+barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}${this._buildOverdueRisk(item.record, 1) ? ' overdue-risk' : ''}`,
       ownerName: item.record?.Owner?.Name || "",
       ownerInitials: this._getOwnerInitials(item.record?.Owner?.Name || ""),
       ownerColor: this._getOwnerColor(item.record?.OwnerId || ""),
@@ -915,7 +923,8 @@ if (!preserveScroll) {
         outlineStyle,
         targetEndDate || plannedEndDate
       ),
-      barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3-bar actual-bar-item"} ${this._barToneClass(fillClass)}`,
+      overdueRisk: this._buildOverdueRisk(child.record, level),
+barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3-bar actual-bar-item"} ${this._barToneClass(fillClass)}${this._buildOverdueRisk(child.record, level) ? ' overdue-risk' : ''}`,
       progressStyle: this._buildProgressStyle(progress, statusValue) +
                this._getBarColorOverride(statusValue),
       progressLabel: statusValue || "",
@@ -1351,15 +1360,11 @@ handleItemClick(event) {
         key: "end",
         label: "End Date",
         before: this._formatDate(
-          drag.originalDates.targetEnd ||
-            drag.originalDates.actualEnd ||
-            drag.originalDates.plannedEnd
-        ),
-        after: this._formatDate(
-          shiftedDates.targetEnd ||
-            shiftedDates.actualEnd ||
-            shiftedDates.plannedEnd
-        )
+  drag.originalDates.actualEnd || drag.originalDates.plannedEnd
+),
+after: this._formatDate(
+  shiftedDates.actualEnd || shiftedDates.plannedEnd
+)
       });
     }
 
@@ -1508,7 +1513,21 @@ handleItemClick(event) {
     const message = event?.detail?.message || "Failed to save record changes.";
     this.errorMessage = message;
   }
+_buildOverdueRisk(record, level) {
+  const today      = this._getCurrentDate();
+  const targetEnd  = this._getTargetEndDate(record, level);
+  const plannedEnd = this._getPlannedEndDate(record, level);
+  const deadLine   = targetEnd || plannedEnd;
+  if (!deadLine || deadLine.getTime() >= today.getTime()) return null;
 
+  const daysLate = Math.ceil((today.getTime() - deadLine.getTime()) / DAY_MS);
+  return {
+    isOverdue:   true,
+    daysLate,
+    deadlineStr: this._formatDate(deadLine),
+    description: `Target end date was ${this._formatDate(deadLine)} — this record is ${daysLate} day${daysLate === 1 ? '' : 's'} overdue.`
+  };
+}
   undoLastChange() {
     if (this.disableUndo) {
       return;
@@ -2237,23 +2256,22 @@ _safeFileName() {
     }
 
     if (mode === "resize-end") {
-      let nextBaseEnd = this._shiftDate(baseEnd, days);
-      if (
-        baseStart &&
-        nextBaseEnd &&
-        nextBaseEnd.getTime() < baseStart.getTime()
-      ) {
-        nextBaseEnd = new Date(baseStart.getTime());
-      }
-      // Always shift the actual end date (creates it if not present)
-      return {
-        plannedStart,
-        plannedEnd,
-        actualStart,
-        actualEnd: nextBaseEnd,
-        targetEnd
-      };
-    }
+  let nextBaseEnd = this._shiftDate(baseEnd, days);
+  if (
+    baseStart &&
+    nextBaseEnd &&
+    nextBaseEnd.getTime() < baseStart.getTime()
+  ) {
+    nextBaseEnd = new Date(baseStart.getTime());
+  }
+  return {
+    plannedStart,
+    plannedEnd,
+    actualStart,
+    actualEnd: nextBaseEnd,
+    targetEnd: targetEnd ? this._shiftDate(targetEnd, days) : null
+  };
+}
 
     // move: shift whichever fields exist (both planned and actual will be shifted by _buildShiftedDatesForItem)
     return this._buildShiftedDatesForItem(record, level, days);
@@ -2374,7 +2392,7 @@ _safeFileName() {
       );
       const prog = Math.min(Math.max(entry.progress || 0, 0), 100);
       const nextFillClass = this._barFillClass(statusVal, prog);
-      const nextProgressStyle = this._buildProgressStyle(prog, statusVal);
+      const nextProgressStyle = this._buildProgressStyle(prog, statusVal) + this._getBarColorOverride(statusVal);
       const baseBarClass = String(
         entry.barClass || "gantt-bar-item actual-bar-item"
       )
@@ -2657,10 +2675,11 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
   ];
 
   return {
-    summary,
-    section1: { name: sec1Name, fields: sec1Fields },
-    section2: { name: sec2Name, fields: sec2Fields }
-  };
+  summary,
+  overdueRisk: this._buildOverdueRisk(record, level),
+  section1: { name: sec1Name, fields: sec1Fields },
+  section2: { name: sec2Name, fields: sec2Fields }
+};
 }
 
   _findRecord(id) {

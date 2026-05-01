@@ -2235,7 +2235,7 @@
   color: #0055b3;
 }
 /* ══════════════════════════════════════════════════
-   DARK MODE — GitHub-style true dark
+   DARK MODE — style true dark
    ══════════════════════════════════════════════════ */
 
 .dark-mode {
@@ -2306,7 +2306,7 @@
 .dark-mode .btn-search-clear:hover     { color: #e6edf3; }
 
 /* ── Legend ─────────────────────────────────────── */
-.dark-mode .gantt-legend-label { color: #8b949e; }
+.dark-mode .gantt-legend-label { color: #131517; }
 
 /* ── Error banner ───────────────────────────────── */
 .dark-mode .error-banner {
@@ -2618,3 +2618,108 @@
   background: rgba(13,17,23,0.88);
   color:      #8b949e;
 }
+/* ── Overdue Risk Indicator ─────────────────────────────── */
+.gantt-bar-item.overdue-risk .gantt-bar-fill,
+.gantt-bar-item.overdue-risk [data-element="progress-fill"] {
+  animation: overdue-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes overdue-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%       { filter: brightness(1.25) saturate(1.3); }
+}
+
+.overdue-badge {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+  text-transform: uppercase;
+  box-shadow: 0 1px 4px rgba(220,38,38,0.45);
+}
+
+/* ── Risk Panel in Modal ────────────────────────────────── */
+.modal-risk-section {
+  margin-top: 1.5rem;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
+  background: #fff7f7;
+  overflow: hidden;
+}
+
+.modal-risk-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: #fee2e2;
+  border-bottom: 1px solid #fca5a5;
+}
+
+.modal-risk-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #991b1b;
+  text-transform: uppercase;
+}
+
+.modal-risk-body {
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-risk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.modal-risk-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9b1c1c;
+  min-width: 90px;
+  padding-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.modal-risk-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.modal-risk-value.risk-days {
+  font-weight: 700;
+  color: #dc2626;
+}
+
+/* Dark mode */
+.dark-mode .modal-risk-section {
+  background: #2a1010;
+  border-color: #7f1d1d;
+}
+.dark-mode .modal-risk-header {
+  background: #3d1515;
+  border-color: #7f1d1d;
+}
+.dark-mode .modal-risk-title  { color: #fca5a5; }
+.dark-mode .modal-risk-label  { color: #fca5a5; }
+.dark-mode .modal-risk-value  { color: #e6edf3; }
+.dark-mode .modal-risk-value.risk-days { color: #f87171; }

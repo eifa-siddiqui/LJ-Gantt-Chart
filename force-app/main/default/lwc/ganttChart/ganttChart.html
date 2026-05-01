@@ -254,8 +254,11 @@
                   <div class={l1.barClass} style={l1.barStyle} data-element="actual-bar"
                     onmousedown={handleBarDragStart} onclick={handleLevel1Click} onmouseenter={handleBarHover}
                     onmousemove={handleBarMove} onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
-                    <div class="drag-handle drag-handle-left"></div>
-                    <div class={l1.fillClass} style={l1.progressStyle} data-element="progress-fill"></div>
+                    <template if:true={l1.overdueRisk}>
+  <span class="overdue-badge">⚠ Overdue</span>
+</template>
+<div class="drag-handle drag-handle-left"></div>
+<div class={l1.fillClass} style={l1.progressStyle} data-element="progress-fill"></div>
                     <span class={l1.statusLabelClass}>{l1.progressLabel}</span>
                     <div class="drag-handle drag-handle-right"></div>
                   </div>
@@ -433,8 +436,31 @@
                   </div>
                 </template>
              </lightning-record-view-form>
-              <!-- Fixed Owner Section -->
-              <div class="modal-owner-section">
+              <template if:true={isSelectedRecordOverdue}>
+  <div class="modal-risk-section">
+    <div class="modal-risk-header">
+      <lightning-icon icon-name="utility:warning" size="x-small" variant="error"></lightning-icon>
+      <span class="modal-risk-title"> Overdue Risk</span>
+    </div>
+    <div class="modal-risk-body">
+      <div class="modal-risk-row">
+        <span class="modal-risk-label">Target End</span>
+        <span class="modal-risk-value">{selectedRecordOverdueRisk.deadlineStr}</span>
+      </div>
+      <div class="modal-risk-row">
+        <span class="modal-risk-label">Days Late</span>
+        <span class="modal-risk-value risk-days">{selectedRecordOverdueRisk.daysLate} days overdue</span>
+      </div>
+      <div class="modal-risk-row">
+        <span class="modal-risk-label">Description</span>
+        <span class="modal-risk-value">{selectedRecordOverdueRisk.description}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- Fixed Owner Section -->
+<div class="modal-owner-section">
                 <h3 class="modal-owner-section-title">OWNER</h3>
                 <div class="modal-owner-card">
                   <template for:each={selectedRecordSummary} for:item="detail">
