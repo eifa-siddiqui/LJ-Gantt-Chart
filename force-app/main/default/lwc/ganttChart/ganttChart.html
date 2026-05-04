@@ -255,7 +255,7 @@
                     onmousedown={handleBarDragStart} onclick={handleLevel1Click} onmouseenter={handleBarHover}
                     onmousemove={handleBarMove} onmouseleave={hideTooltip} data-id={l1.record.Id} data-level="1">
                     <template if:true={l1.overdueRisk}>
-  <span class="overdue-badge">⚠ Overdue</span>
+  <span class="overdue-badge">⚠</span>
 </template>
 <div class="drag-handle drag-handle-left"></div>
 <div class={l1.fillClass} style={l1.progressStyle} data-element="progress-fill"></div>

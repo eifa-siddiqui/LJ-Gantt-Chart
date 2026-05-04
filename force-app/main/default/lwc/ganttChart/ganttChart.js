@@ -850,7 +850,7 @@ if (!preserveScroll) {
       barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}`,
       progressStyle: this._buildProgressStyle(progress, statusValue) +
                this._getBarColorOverride(statusValue),
-      progressLabel: statusValue || "",
+      progressLabel: this._getStatusLabel(statusValue),
       statusLabelClass: this._getStatusLabelClass(
         statusValue,
         actualStartDate,
@@ -2655,11 +2655,10 @@ _buildSelectedItemCache(id, level, objectApi, sec1Name, sec1Fields, sec2Name, se
       value: `${Math.min(Math.max(item.progress || 0, 0), 100)}%`,
       valueStyle: this._getStatusColor(statusValue)
     },
-    {
-      key: "status", label: "Status",
-      value: statusValue || "N/A",
-      valueStyle: this._getStatusColor(statusValue)
-    },
+    { key: "status", label: "Status",
+  value: this._getStatusLabel(statusValue) || "N/A",
+  valueStyle: this._getStatusColor(statusValue)
+},
     { key: "start",    label: "Start",    value: this._formatDate(this._getItemStartDate(item, level)) },
     { key: "end",      label: "End",      value: this._formatDate(this._getItemEndDate(item, level)) },
     { key: "duration", label: "Duration", value: item.duration || "N/A" },
@@ -3021,7 +3020,7 @@ if (!preserveScroll) {
         fillClass: l1FillClass,
         progressStyle: this._buildProgressStyle(l1Progress, l1Status) +
                this._getBarColorOverride(l1Status),
-        progressLabel: l1Status || "",
+        progressLabel: this._getStatusLabel(l1Status),
         statusLabelClass: this._getStatusLabelClass(
           l1Status,
           l1ActualStart,
@@ -3077,7 +3076,7 @@ if (!preserveScroll) {
             barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(l2FillClass)}`,
             progressStyle: this._buildProgressStyle(l2Progress, l2Status) +
                this._getBarColorOverride(l2Status),
-            progressLabel: l2Status || "",
+progressLabel: this._getStatusLabel(l2Status),
             statusLabelClass: this._getStatusLabelClass(
               l2Status,
               l2ActualStart,
@@ -3137,7 +3136,7 @@ if (!preserveScroll) {
                 barClass: `gantt-bar-item l3-bar actual-bar-item ${this._barToneClass(l3FillClass)}`,
                 progressStyle: this._buildProgressStyle(l3Progress, l3Status) +
                this._getBarColorOverride(l3Status),
-                progressLabel: l3Status || "",
+progressLabel: this._getStatusLabel(l3Status),
                 statusLabelClass: this._getStatusLabelClass(
                   l3Status,
                   l3ActualStart,
@@ -3167,17 +3166,9 @@ if (!preserveScroll) {
     return value == null ? "" : String(value);
   }
 
-  _buildHoverText(
-    record,
-    level,
-    statusValue,
-    startDate,
-    endDate,
-    duration,
-    progress
-  ) {
-    return `${record?.Name || "Untitled"}\nLevel: ${level}\nStatus: ${statusValue || "N/A"}\nStart: ${this._formatDate(startDate)}\nEnd: ${this._formatDate(endDate)}\nDuration: ${duration}\nProgress: ${progress}%`;
-  }
+  _buildHoverText(record, level, statusValue, startDate, endDate, duration, progress) {
+  return `${record?.Name || "Untitled"}\nLevel: ${level}\nStatus: ${this._getStatusLabel(statusValue) || "N/A"}\nStart: ${this._formatDate(startDate)}\nEnd: ${this._formatDate(endDate)}\nDuration: ${duration}\nProgress: ${progress}%`;
+}
 
   _formatDate(value) {
     if (!value || Number.isNaN(value)) return "N/A";
@@ -3781,19 +3772,37 @@ _getBarColorOverride(statusValue) {
 
   return canvas;
 }
+get _statusLabelMap() {
+  const map = {};
+  (this.statusChoices || []).forEach(opt => {
+    if (opt.value) {
+      map[opt.value.toLowerCase()] = opt.label;
+    }
+  });
+  return map;
+}
+
+_getStatusLabel(statusValue) {
+  if (!statusValue) return '';
+  const map = this._statusLabelMap;
+  // Try exact match first, then lowercase
+  return map[statusValue] 
+      || map[statusValue.toLowerCase()] 
+      || statusValue;
+}
 get legendItems() {
   const parsed = this._parseStatusColorMap();
 
   if (parsed.length) {
     return parsed.map(item => ({
-      label:      item.status.charAt(0).toUpperCase() + item.status.slice(1),
+      label:      this._getStatusLabel(item.status) || 
+                  (item.status.charAt(0).toUpperCase() + item.status.slice(1)),
       tone:       item.status,
       rawColor:   item.rawColor,
       colorStyle: `background-color:${item.color};`
     }));
   }
 
-  // Fallback default legend when no map configured
   return [
     { label: 'Not Started', tone: 'not-started', colorStyle: `background-color:${STATUS_COLOR_PALETTE.blue};`   },
     { label: 'New',         tone: 'new',         colorStyle: `background-color:${STATUS_COLOR_PALETTE.navy};`   },
