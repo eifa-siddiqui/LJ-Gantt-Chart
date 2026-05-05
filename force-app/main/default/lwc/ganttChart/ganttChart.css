@@ -96,7 +96,7 @@
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.25rem;
   flex-wrap: wrap;
 }
 
@@ -129,10 +129,11 @@
 
 .btn-action {
   border: 1px solid #d0d7de;
-  background: #fafafa;
+  background: #f8fafc;
   color: #475569;
   font-size: 0.78rem;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .btn-action:hover:not(:disabled) {
@@ -181,6 +182,7 @@
   width: 1px;
   height: 22px;
   background: #d8dee6;
+  margin: 0 0.15rem;
 }
 
 .scale-select,
@@ -234,6 +236,7 @@
   align-items: center;
   gap: 0.45rem;
 }
+
 
 .filter-label {
   color: #64748b;
@@ -515,58 +518,48 @@
   display: none;
 }
 .l1-name-link::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: #1d70d6 !important;
-  border-radius: 50%;
-  flex-shrink: 0;
+  display: none;
 }
 .row-bullet {
-  color: #0055b3;
-  font-size: 8px;
-  margin-right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0055b3;
+  margin-right: 0.4rem;
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
 }
 
 .l1-name-link:hover {
   color: #0055b3;
 }
 
-.name-cell span.slds-truncate::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: #1d70d6;
-  border-radius: 50%;
-  margin-right: 0.5rem;
-  flex-shrink: 0;
+.name-cell span.slds-truncate {
+  /* Bullet moved to explicit HTML element (.row-bullet) */
+}
+
+.name-cell span.l1-name-link.slds-truncate::before {
+  display: none;
 }
 
 .expand-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: #0055b3;
-  font-size: 0.65rem;
-  line-height: 1;
+  width: 14px;
+  height: 14px;
+  color: #0055b3 !important;
   transition: transform 0.15s ease;
   flex-shrink: 0;
-  padding: 0;
-  margin-right: 0.25rem;
+  margin-right: 0.3rem;
+  --sds-c-icon-color-foreground-default: #0055b3 !important;
+  --sds-c-icon-color-foreground: #0055b3 !important;
+  --slds-c-icon-color-foreground-default: #0055b3 !important;
+  --slds-c-icon-color-foreground: #0055b3 !important;
 }
 
 .expand-icon.open {
   transform: rotate(90deg);
-}
-.expand-icon {
-  display: none !important;
 }
 
 .duration-text {
@@ -663,13 +656,15 @@
   flex: 1 1 auto;
   min-width: 0;
   padding-right: 0.45rem;
+  display: flex;
+  align-items: center;
 }
 
-.l2-row .name-cell {
+.l2-row .name-slot {
   padding-left: 1.2rem;
 }
 
-.l3-row .name-cell {
+.l3-row .name-slot {
   padding-left: 2.35rem;
 }
 .owner-cell {
@@ -679,11 +674,6 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-}
-
-.l2-row,
-.l3-row {
-  gap: 0.6rem;
 }
 
 .search-highlight {
@@ -784,7 +774,7 @@
   bottom: 0;
   width: 2px;
   background: #e53935;
-  z-index: 10;
+  z-index: 2;  /* LOWER from 10 → 2, so it stays under the sticky header */
   box-shadow: 0 0 6px rgba(229, 57, 53, 0.35);
   pointer-events: none;
 }
@@ -792,7 +782,7 @@
 .today-line-label {
   position: absolute;
   top: 2px;
-  right: 6px;
+  left: 6px;      /* CHANGE from right:6px → left:6px so label goes rightward */
   padding: 2px 5px;
   border-radius: 3px;
   background: #e53935;
@@ -1410,6 +1400,15 @@
     width: 100%;
   }
 
+  .filter-panel {
+    top: 96px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 120px);
+  }
+
   .filter-group {
     width: 100%;
     justify-content: space-between;
@@ -1660,56 +1659,12 @@
   border-radius: 3px;
   flex-shrink: 0;
 }
-/* ── Filter Toggle Button ─────────────────────────────────────────────────── */
-.filter-toggle-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 10px;
-  height: 32px;
-  border: 1px solid #d8dde6;
-  border-radius: 4px;
-  background: #fff;
-  color: #444;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  gap: 5px;
-  transition: background 0.15s, border-color 0.15s;
-}
-.filter-toggle-btn:hover {
-  background: #f3f3f3;
-  border-color: #b0b7c3;
-}
-.filter-toggle-btn--active {
-  background: #eaf4ff;
-  border-color: #0070d2;
-  color: #0055b3;
-}
-.filter-toggle-btn--active:hover {
-  background: #d8eeff;
-}
-.filter-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: #0070d2;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
- 
+
 /* ── Backdrop ─────────────────────────────────────────────────────────────── */
 .filter-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 8990;
+  z-index: 9998;
   background: transparent;
 }
  
@@ -1719,32 +1674,33 @@
   Width matches the screenshot (~480–520px), shadow is a soft elevation.
 */
 .filter-panel {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  z-index: 9000;
-  width: 520px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 110px);
-  background: #fff;
-  border: 1px solid #dddbda;
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+  position: fixed;
+  z-index: 9999;
+  top: 150px;
+  right: 36px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  width: 480px;
+  max-width: calc(100vw - 72px);
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  padding: 0;
+  display: none;
+}
+
+.filter-panel-open {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  /* Hidden by default */
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-6px);
-  transition: opacity 0.14s ease, transform 0.14s ease;
 }
-.filter-panel.filter-panel-open {
-  opacity: 1;
-  pointer-events: all;
-  transform: translateY(0);
+
+.filter-panel:not(.filter-panel-open) {
+  display: none;
 }
- 
+
+
+
 /* ── Panel Header — "Filters  ×" ──────────────────────────────────────────── */
 .filter-panel__header {
   display: flex;
@@ -2044,6 +2000,62 @@
   max-height: calc(100vh - 72px);
 }
 /* ── Filter Logic Section ─────────────────────────── */
+.filter-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #f25284;
+  border-radius: 50%;
+  background: #f25284;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s;
+  --slds-c-icon-color-foreground-default: #ffffff;
+  --slds-c-icon-color-foreground: #ffffff;
+  --lwc-colorTextIconDefault: #ffffff;
+}
+
+.filter-toggle-btn:hover {
+  background: #e84375;
+  border-color: #e84375;
+}
+
+.filter-toggle-btn--active {
+  background: #d93268;
+  border-color: #d93268;
+}
+
+.filter-toggle-btn--active:hover {
+  background: #c62f60;
+}
+
+.filter-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #0070d2;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px #ffffff;
+}
 .filter-logic-section {
   margin-top: 12px;
   padding: 10px 12px 12px;
@@ -2166,19 +2178,23 @@
 .export-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 10px;
+  justify-content: center;
+  width: 32px;
   height: 32px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #fff;
+  padding: 0;
+  border: 1px solid #c9c9c9;
+  border-radius: 50%;
+  background: #ffffff;
   font-size: 12px;
   font-weight: 600;
-  color: #334155;
+  color: #0055b3;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s, border-color 0.15s;
   line-height: 1;
+  --slds-c-icon-color-foreground-default: #0055b3;
+  --slds-c-icon-color-foreground: #0055b3;
+  --lwc-colorTextIconDefault: #0055b3;
 }
 .export-toggle-btn:hover {
   background: #f1f5f9;
@@ -2191,12 +2207,6 @@
   --lwc-colorTextIconDefault: #334155;
 }
 
-.export-chevron {
-  font-size: 11px;
-  color: #64748b;
-  margin-left: 1px;
-  line-height: 1;
-}
 
 .export-dropdown-menu {
   position: absolute;

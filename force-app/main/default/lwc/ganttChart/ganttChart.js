@@ -175,9 +175,13 @@ closeExportMenu() {
     return Number.isNaN(parsed) ? 2 : Math.min(Math.max(parsed, 0), 3);
   }
 
+  get showBullets() {
+    return this.hierarchyDepth === 0;
+  }
+
   get supportsLevel2() {
     return (
-      this.hierarchyDepth >= 2 &&
+      this.hierarchyDepth >= 1 &&
       !!this.level2Object &&
       !!this.level2ParentLookup
     );
@@ -185,7 +189,7 @@ closeExportMenu() {
 
   get supportsLevel3() {
     return (
-      this.hierarchyDepth >= 3 &&
+      this.hierarchyDepth >= 2 &&
       !!this.level3Object &&
       !!this.level3ParentLookup
     );
@@ -456,7 +460,8 @@ get darkModeTitle() {
     this.exportMenuOpen = false;
   }
 };
-document.addEventListener('click', this._exportClickOutHandler);
+// Use capture:true to intercept clicks through shadow DOM boundaries
+document.addEventListener('click', this._exportClickOutHandler, true);
     document.addEventListener("fullscreenchange", this._fullscreenHandler);
     document.addEventListener("keydown", this._keydownHandler);
     document.addEventListener("mousemove", this._dragMoveHandler);
@@ -496,8 +501,7 @@ document.addEventListener('click', this._exportClickOutHandler);
       window.removeEventListener("resize", this._resizeHandler);
     }
     if (this._exportClickOutHandler) {
-  document.removeEventListener('click', this._exportClickOutHandler);
-}
+document.removeEventListener('click', this._exportClickOutHandler, true);}
   }
 
   handleDocumentKeyDown(event) {
@@ -720,18 +724,8 @@ if (!preserveScroll) {
 
     this._refreshView();
 
-    if (
-      this.supportsLevel2 &&
-      this.sourceLevel1Data.length &&
-      this._validateL2Config()
-    ) {
-      this.expandAll();
-      setTimeout(() => this.scrollToToday(), 0);
-    } else {
-      this.initTimeline();
-      this.isLoading = false;
-      setTimeout(() => this.scrollToToday(), 0);
-    }
+    this.isLoading = false;
+    setTimeout(() => this.scrollToToday(), 0);
   })
   .catch((error) => {
     this.errorMessage = `Error loading Level 1: ${this._msg(error)}`;
@@ -771,6 +765,7 @@ if (!preserveScroll) {
   }
 
   _loadLevel3(parentId) {
+    const filterFields = this._getActiveFilterFieldNames();
     const fields = [
       this.level3Section1Fields,
       this.level3Section2Fields,
@@ -781,7 +776,8 @@ if (!preserveScroll) {
       this.level3ActualStartDate,
       this.level3ActualEndDate,
       this.level3TargetEndDate,
-      this.level3Progress
+      this.level3Progress,
+      ...filterFields
     ]
       .filter(Boolean)
       .join(",");
@@ -834,8 +830,10 @@ if (!preserveScroll) {
       ...item,
       _l2Loaded: false,
       expanded: false,
+      iconClass: "expand-icon",
       rowClass: "l1-item",
       children: [],
+      hasChildren: item.children && item.children.length > 0,
       duration: this.calculateDuration(actualStartDate, barEndDate),
       plannedBarStyle: outlineStyle,
       barStyle: this.calculateBarStyle(
@@ -872,7 +870,9 @@ barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}${this
       ownerInitials: this._getOwnerInitials(item.record?.Owner?.Name || ""),
       ownerColor: this._getOwnerColor(item.record?.OwnerId || ""),
       ownerAvatarStyle: `background-color: ${this._getOwnerColor(item.record?.OwnerId || "")}; color: #ffffff;`,
-      ownerId: item.record?.OwnerId || ""
+      ownerId: item.record?.OwnerId || "",
+      expanded: false,
+      iconClass: "expand-icon"
     };
   }
 
@@ -912,6 +912,7 @@ barClass: `gantt-bar-item actual-bar-item ${this._barToneClass(fillClass)}${this
       ...child,
       expanded: false,
       rowClass: level === 2 ? "l2-row" : "l3-row",
+      iconClass: "expand-icon",
       duration,
       plannedBarStyle: outlineStyle,
       barStyle: this.calculateBarStyle(
@@ -952,15 +953,13 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
     };
   }
 
-  _barFillClass(statusValue, progress) {
+  _determineStatusTone(statusValue) {
     const normalizedStatus = (statusValue || "").toLowerCase();
     const customTone = this._getConfiguredTone(normalizedStatus);
-    if (customTone) {
-      return `gantt-bar-fill status-${customTone}`;
-    }
-    if (!normalizedStatus) {
-      return "gantt-bar-fill status-na";
-    }
+    if (customTone) return customTone;
+
+    if (!normalizedStatus) return "na";
+
     if (
       normalizedStatus.includes("complete") ||
       normalizedStatus.includes("completed") ||
@@ -969,15 +968,12 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
       normalizedStatus.includes("finished") ||
       normalizedStatus.includes("resolved") ||
       normalizedStatus.includes("approved")
-    ) {
-      return "gantt-bar-fill status-complete";
-    }
-    if (normalizedStatus.includes("pending")) {
-      return "gantt-bar-fill status-pending";
-    }
-    if (normalizedStatus.includes("new")) {
-      return "gantt-bar-fill status-not-started";
-    }
+    ) return "complete";
+
+    if (normalizedStatus.includes("pending")) return "pending";
+
+    if (normalizedStatus.includes("new")) return "not-started";
+
     if (
       normalizedStatus.includes("hold") ||
       normalizedStatus.includes("risk") ||
@@ -988,9 +984,8 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
       normalizedStatus.includes("cancelled") ||
       normalizedStatus.includes("canceled") ||
       normalizedStatus.includes("waiting")
-    ) {
-      return "gantt-bar-fill status-pending";
-    }
+    ) return "pending";
+
     if (
       normalizedStatus.includes("not") ||
       normalizedStatus.includes("plan") ||
@@ -998,9 +993,24 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
       normalizedStatus.includes("todo") ||
       normalizedStatus.includes("draft") ||
       normalizedStatus.includes("queued")
-    ) {
-      return "gantt-bar-fill status-not-started";
+    ) return "not-started";
+
+    // Used for mapping if no substring matches
+    return "na";
+  }
+
+  _barFillClass(statusValue, progress) {
+    const normalizedStatus = (statusValue || "").toLowerCase();
+    const tone = this._determineStatusTone(statusValue);
+
+    if (this._getConfiguredTone(normalizedStatus)) {
+      return `gantt-bar-fill status-${tone}`;
     }
+
+    if (tone !== "na") {
+      return `gantt-bar-fill status-${tone}`;
+    }
+
     if (progress >= 100) {
       return "gantt-bar-fill status-complete";
     }
@@ -1025,6 +1035,7 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
         ...item,
         expanded: false,
         rowClass: "l1-item",
+        iconClass: "expand-icon"
       });
       this._refreshView();
       return;
@@ -1048,6 +1059,7 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
           ...item,
           _l2Loaded: true,
           children,
+          hasChildren: children && children.length > 0,
           expanded: true,
           rowClass: "l1-item expanded-row",
           iconClass: "expand-icon open"
@@ -1089,6 +1101,7 @@ barClass: `${level === 2 ? "gantt-bar-item actual-bar-item" : "gantt-bar-item l3
         ...l2Item,
         expanded: false,
         rowClass: "l2-row",
+        iconClass: "expand-icon"
       });
       this._refreshView();
       return;
@@ -1600,7 +1613,7 @@ handleSearchClear(event) {
         key: "status",
         label: "Status",
         value:
-          this._getStatusValue(item.record, this._getStatusField(level)) ||
+          this._getStatusLabel(this._getStatusValue(item.record, this._getStatusField(level))) ||
           "N/A"
       },
       {
@@ -1797,10 +1810,12 @@ handleSearchClear(event) {
     this.sourceLevel1Data = this.sourceLevel1Data.map((item) => ({
       ...item,
       expanded: false,
+      iconClass: "expand-icon",
       rowClass: "l1-item",
       children: (item.children || []).map((child) => ({
         ...child,
         expanded: false,
+        iconClass: "expand-icon",
         rowClass: "l2-row"
       }))
     }));
@@ -1818,7 +1833,8 @@ handleSearchClear(event) {
         updated[index] = {
           ...updated[index],
           expanded: true,
-          rowClass: "l1-item expanded-row"
+          rowClass: "l1-item expanded-row",
+          iconClass: "expand-icon open"
         };
         this.sourceLevel1Data = updated;
         return Promise.resolve();
@@ -1829,6 +1845,7 @@ handleSearchClear(event) {
           ...updated[index],
           _l2Loaded: true,
           children,
+          hasChildren: children && children.length > 0,
           expanded: true,
           rowClass: "l1-item expanded-row",
           iconClass: "expand-icon open"
@@ -1871,7 +1888,8 @@ handleSearchClear(event) {
           updated[index] = {
             ...updated[index],
             _l2Loaded: true,
-            children
+            children,
+            hasChildren: children && children.length > 0
           };
           this.sourceLevel1Data = updated;
         });
@@ -1908,7 +1926,8 @@ handleSearchClear(event) {
 async exportAsJPG() {
   this.exportMenuOpen = false;
   try {
-    const canvas = this._renderChartToCanvas();
+    const rows = await this._getExpandedCanvasRows();
+    const canvas = this._renderChartToCanvas(rows);
     const link   = document.createElement('a');
     link.href     = canvas.toDataURL('image/jpeg', 0.95);
     link.download = `${this._safeFileName()}.jpg`;
@@ -1922,7 +1941,8 @@ async exportAsJPG() {
 async exportAsPDF() {
   this.exportMenuOpen = false;
   try {
-    const canvas  = this._renderChartToCanvas();
+    const rows = await this._getExpandedCanvasRows();
+    const canvas  = this._renderChartToCanvas(rows);
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
 
     // Strip the data URL prefix to get raw base64
@@ -1946,6 +1966,108 @@ async exportAsPDF() {
   } catch (error) {
     this.errorMessage = `PDF export failed: ${error.message}`;
   }
+}
+
+async _getExpandedCanvasRows() {
+  const expandedTree = await Promise.all(
+    (this.sourceLevel1Data || []).map((l1) => this._buildExpandedExportL1(l1))
+  );
+  return this._collectCanvasRows(this._buildExpandedExportView(expandedTree));
+}
+
+async _buildExpandedExportL1(l1) {
+  let children = l1.children || [];
+
+  if (this.supportsLevel2 && this._validateL2Config()) {
+    children = children.length ? children : await this._loadLevel2(l1.record.Id);
+
+    if (this.supportsLevel3 && this.level3Object && this.level3ParentLookup) {
+      children = await Promise.all(
+        children.map(async (l2) => {
+          const level3Children = (l2.children || []).length
+            ? l2.children
+            : await this._loadLevel3(l2.record.Id);
+          return {
+            ...l2,
+            expanded: true,
+            rowClass: "l2-row expanded-row",
+            iconClass: "expand-icon open",
+            children: level3Children
+          };
+        })
+      );
+    }
+  }
+
+  return {
+    ...l1,
+    expanded: children.length > 0,
+    rowClass: children.length > 0 ? "l1-item expanded-row" : "l1-item",
+    iconClass: children.length > 0 ? "expand-icon open" : "expand-icon",
+    children
+  };
+}
+
+_buildExpandedExportView(level1Items) {
+  const buildLevel3 = (item) => {
+    const visible =
+      this._matchesStatus(item.record, this.level3Progress) &&
+      this._matchesOwner(item) &&
+      this._recordMatchesAdvancedFilters(item.record);
+    return visible ? item : null;
+  };
+
+  const buildLevel2 = (item) => {
+    const children = (item.children || []).map(buildLevel3).filter(Boolean);
+    const directVisible =
+      this._matchesStatus(item.record, this.level2Progress) &&
+      this._matchesOwner(item) &&
+      this._recordMatchesAdvancedFilters(item.record);
+    if (!directVisible && children.length === 0) return null;
+    return {
+      ...item,
+      expanded: children.length > 0,
+      rowClass: children.length > 0 ? "l2-row expanded-row" : "l2-row",
+      iconClass: children.length > 0 ? "expand-icon open" : "expand-icon",
+      children
+    };
+  };
+
+  return (level1Items || [])
+    .map((item) => {
+      const children = (item.children || []).map(buildLevel2).filter(Boolean);
+      const directVisible =
+        this._matchesStatus(item.record, this.level1Progress) &&
+        this._matchesOwner(item) &&
+        this._recordMatchesAdvancedFilters(item.record);
+      if (!directVisible && children.length === 0) return null;
+      return {
+        ...item,
+        expanded: children.length > 0,
+        rowClass: children.length > 0 ? "l1-item expanded-row" : "l1-item",
+        iconClass: children.length > 0 ? "expand-icon open" : "expand-icon",
+        children
+      };
+    })
+    .filter(Boolean);
+}
+
+_collectCanvasRows(level1Items) {
+  const rows = [];
+  for (const l1 of level1Items || []) {
+    rows.push({ type: 'l1', item: l1 });
+    if (l1.expanded) {
+      for (const l2 of l1.children || []) {
+        rows.push({ type: 'l2', item: l2 });
+        if (l2.expanded) {
+          for (const l3 of l2.children || []) {
+            rows.push({ type: 'l3', item: l3 });
+          }
+        }
+      }
+    }
+  }
+  return rows;
 }
 
 _buildMinimalPDF(base64jpeg, pdfW, pdfH, imgPxW, imgPxH) {
@@ -2483,8 +2605,15 @@ _safeFileName() {
       });
   }
 
-  _reloadChartData(preserveScroll = false) {
+_reloadChartData(preserveScroll = false) {
   if (!this.level1Object) return;
+
+  const expandedL1Ids = new Set(
+    (this.sourceLevel1Data || [])
+      .filter((item) => item.expanded)
+      .map((item) => item.record?.Id)
+      .filter(Boolean)
+  );
 
   const filterFields = this._getActiveFilterFieldNames();
   const fields = [
@@ -2515,30 +2644,29 @@ _safeFileName() {
   })
   .then((result) => {
     this.sourceLevel1Data = (result || []).map(item => this._wrapL1(item));
-
-    if (this.supportsLevel2 && expandedL1Ids.size > 0) {
-      const l2Loads = this.sourceLevel1Data
-        .filter(item => expandedL1Ids.has(item.record.Id))
-        .map((item, _) => {
-          const idx = this.sourceLevel1Data.findIndex(
-            r => r.record.Id === item.record.Id
-          );
-          return this._loadLevel2(item.record.Id).then(children => {
-            const updated = [...this.sourceLevel1Data];
-            updated[idx] = {
-              ...updated[idx],
-              _l2Loaded: true,
-              expanded: true,
-              rowClass: "l1-item expanded-row",
-              children
-            };
-            this.sourceLevel1Data = updated;
-          });
+    if (this.supportsLevel2) {
+    const l2Loads = this.sourceLevel1Data
+      .filter(item => expandedL1Ids.has(item.record.Id))
+      .map((item) => {
+        const idx = this.sourceLevel1Data.findIndex(
+          r => r.record.Id === item.record.Id
+        );
+        return this._loadLevel2(item.record.Id).then(children => {
+          const updated = [...this.sourceLevel1Data];
+          updated[idx] = {
+            ...updated[idx],
+            _l2Loaded: true,
+            expanded: true,
+            rowClass: "l1-item expanded-row",
+            children
+          };
+          this.sourceLevel1Data = updated;
         });
-      return Promise.all(l2Loads);
+      });
+     return Promise.all(l2Loads);
     }
   })
-  .then(() => this._refreshView(preserveScroll))
+  .then(() => this._refreshView(preserveScroll))   // ← ADD THIS LINE
   .catch(error => {
     this.errorMessage = `Error reloading chart data: ${this._msg(error)}`;
   });
@@ -3499,21 +3627,8 @@ _getBarColorOverride(statusValue) {
     return `left:${left}px; top:${top}px;`;
   }
 
-  _renderChartToCanvas() {
-  const rows = [];
-  for (const l1 of this.level1Data || []) {
-    rows.push({ type: 'l1', item: l1 });
-    if (l1.expanded) {
-      for (const l2 of l1.children || []) {
-        rows.push({ type: 'l2', item: l2 });
-        if (l2.expanded) {
-          for (const l3 of l2.children || []) {
-            rows.push({ type: 'l3', item: l3 });
-          }
-        }
-      }
-    }
-  }
+  _renderChartToCanvas(rowsOverride) {
+  const rows = rowsOverride || this._collectCanvasRows(this.level1Data);
 
   const sidebarWidth      = this.sidebarWidthPx;
   const chartWidth        = Math.max(
@@ -3627,17 +3742,30 @@ _getBarColorOverride(statusValue) {
   const currentDate  = this._getCurrentDate();
   const contentStartY = topBandHeight + colHeaderHeight + timelineHdrHeight;
   if (this.startDateLimit && this.endDateLimit) {
-    const ratio  = (currentDate.getTime() - this.startDateLimit.getTime()) /
-                   (this.endDateLimit.getTime()  - this.startDateLimit.getTime());
-    const todayX = sidebarWidth + Math.max(0, ratio) * chartWidth;
+    const denominator = this.endDateLimit.getTime() - this.startDateLimit.getTime();
+    const rawRatio = denominator > 0
+      ? (currentDate.getTime() - this.startDateLimit.getTime()) / denominator
+      : 0;
+    const ratio = Math.max(0, Math.min(1, rawRatio));
+    const todayX = sidebarWidth + ratio * chartWidth;
     ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth   = 2;
-    ctx.setLineDash([4, 3]);
+    ctx.lineWidth   = 3;
     ctx.beginPath();
-    ctx.moveTo(todayX, contentStartY);
+    ctx.moveTo(todayX, timeHdrY);
     ctx.lineTo(todayX, height);
     ctx.stroke();
-    ctx.setLineDash([]);
+
+    const todayText = `TODAY ${currentDate.toLocaleDateString('en-GB')}`;
+    ctx.font = '700 10px "Segoe UI", Arial, sans-serif';
+    const labelWidth = ctx.measureText(todayText).width + 10;
+    const labelX = Math.min(Math.max(todayX + 5, sidebarWidth + 4), width - labelWidth - 4);
+    const labelY = contentStartY + 5;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(labelX, labelY, labelWidth, 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(todayText, labelX + 5, labelY + 9);
   }
 
   // ── Rows ──────────────────────────────────────────────────────────────
@@ -3770,6 +3898,33 @@ _getBarColorOverride(statusValue) {
     currentY += rowHeight;
   });
 
+  if (this.startDateLimit && this.endDateLimit) {
+    const denominator = this.endDateLimit.getTime() - this.startDateLimit.getTime();
+    const rawRatio = denominator > 0
+      ? (currentDate.getTime() - this.startDateLimit.getTime()) / denominator
+      : 0;
+    const ratio = Math.max(0, Math.min(1, rawRatio));
+    const todayX = sidebarWidth + ratio * chartWidth;
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(todayX, timeHdrY);
+    ctx.lineTo(todayX, height);
+    ctx.stroke();
+
+    const todayText = `TODAY ${currentDate.toLocaleDateString('en-GB')}`;
+    ctx.font = '700 10px "Segoe UI", Arial, sans-serif';
+    const labelWidth = ctx.measureText(todayText).width + 10;
+    const labelX = Math.min(Math.max(todayX + 5, sidebarWidth + 4), width - labelWidth - 4);
+    const labelY = contentStartY + 5;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(labelX, labelY, labelWidth, 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(todayText, labelX + 5, labelY + 9);
+  }
+
   return canvas;
 }
 get _statusLabelMap() {
@@ -3791,6 +3946,17 @@ _getStatusLabel(statusValue) {
       || statusValue;
 }
 get legendItems() {
+  if (this.statusChoices && this.statusChoices.length > 0) {
+    return this.statusChoices.map(item => {
+      const tone = this._determineStatusTone(item.value);
+      return {
+        label:      item.label,
+        tone:       tone,
+        colorStyle: this._getSwatchColorStyle(tone, item.value)
+      };
+    });
+  }
+
   const parsed = this._parseStatusColorMap();
 
   if (parsed.length) {
@@ -3837,11 +4003,11 @@ get filterPanelClass() {
     ? "filter-panel filter-panel-open"
     : "filter-panel";
 }
- 
+
 get filterButtonClass() {
   return this.activeFilterCount > 0
-    ? "filter-toggle-btn filter-toggle-btn--active"
-    : "filter-toggle-btn";
+    ? 'filter-toggle-btn filter-toggle-btn--active'
+    : 'filter-toggle-btn';
 }
  
 get filterBadgeLabel() {
@@ -3968,13 +4134,14 @@ _makeRow(fieldDef, isFirstRow = false) {
   // fieldDef may be undefined when availableFilterFields is still loading
   const fd       = fieldDef || this.availableFilterFields[0] || { value: "", type: "string", options: [] };
   const operators = this._getOperatorsForType(fd.type);
-  const logicOps  = this._getLogicOperators();
   const isPicklist = this._isPicklistType(fd.type);
   const isDate     = this._isDateType(fd.type);
   const isBoolean  = this._isBooleanType(fd.type);
+  const id = ++this._filterRowCounter;
   // Sequential display number — recomputed fresh in _rebuildRowNumbers()
   return {
-    id:              ++this._filterRowCounter,
+    id,
+    logicKey:        `logic-${id}`,
     displayNum:      this.filterRows.length + 1,   // will be normalised
     field:           fd.value,
     fieldType:       fd.type,
@@ -4004,9 +4171,7 @@ _rebuildRowNumbers() {
 toggleFilterPanel() {
   this.isFilterPanelOpen = !this.isFilterPanelOpen;
   if (this.isFilterPanelOpen) {
-    // Load fields lazily on first open
     this._loadFilterFields();
-    // Start with one empty row if the panel has none
     if (this.filterRows.length === 0) {
       this._addFilterRow();
     }
@@ -4107,7 +4272,7 @@ applyFilters() {
     r => r.field && r.value !== "" && r.value !== null && r.value !== undefined
   );
   this.activeFilterCount = active.length;
-  
+  this.isFilterPanelOpen = false;
   // Reload data so filter fields are included in SOQL
   this._reloadChartData(true);
 }

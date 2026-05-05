@@ -25,13 +25,33 @@
           </template>
         </select>
         <div class="separator"></div>
-        <!-- Export -->
+
+        <div class="filter-btn-wrap">
+        <lightning-button-icon
+    icon-name="utility:filterList"
+    alternative-text="Filter"
+    title="Filter"
+    onclick={toggleFilterPanel}
+    variant="border-filled">
+</lightning-button-icon>
+  <template if:true={hasActiveFilters}>
+    <span class="filter-badge">{filterBadgeLabel}</span>
+  </template>
+</div>
+        <!--Dark mode
+<button class="btn-darkmode-toggle" onclick={toggleDarkMode} title={darkModeTitle}>
+  <template if:true={isDarkMode}>☀️</template>
+  <template if:false={isDarkMode}>🌙</template>
+</button>  -->
+  <!-- Export -->
         <div class="export-dropdown-wrap">
-  <button class="btn-action export-toggle-btn" onclick={toggleExportMenu} title="Export">
-    <lightning-icon icon-name="utility:download" size="x-small" class="export-btn-icon"></lightning-icon>
-    <span>Export</span>
-    <span class="export-chevron">▾</span>
-  </button>
+  <lightning-button-icon
+    icon-name="utility:download"
+    alternative-text="Export"
+    title="Export"
+    onclick={toggleExportMenu}
+    variant="border-filled">
+</lightning-button-icon>
   <template if:true={exportMenuOpen}>
     <div class="export-dropdown-menu" onclick={stopPropagation}>
       <button class="export-menu-item" onclick={exportAsJPG}>
@@ -45,19 +65,6 @@
     </div>
   </template>
 </div>
-        
-        <button class={filterButtonClass} onclick={toggleFilterPanel} title="Filter" aria-label="Toggle Filters"
-          aria-expanded={isFilterPanelOpen}>
-          <lightning-icon icon-name="utility:filterList" size="x-small"></lightning-icon>
-          <template if:true={hasActiveFilters}>
-            <span class="filter-badge">{filterBadgeLabel}</span>
-          </template>
-        </button>
-        <!--Dark mode-->
-<button class="btn-darkmode-toggle" onclick={toggleDarkMode} title={darkModeTitle}>
-  <template if:true={isDarkMode}>☀️</template>
-  <template if:false={isDarkMode}>🌙</template>
-</button>
         <!-- Refresh -->
         <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" title="Refresh"
           onclick={reloadChart} variant="border-filled">
@@ -162,11 +169,14 @@
                 <div class="name-slot">
                   <template if:true={l1.children}>
                     <template if:true={supportsLevel2}>
-                      <span class="row-bullet">&#9679;</span>
+                      <lightning-icon icon-name="utility:right" size="xx-small" class={l1.iconClass}></lightning-icon>
                     </template>
                   </template>
 
                   <div class="name-cell">
+                    <template if:true={showBullets}>
+                      <span class="row-bullet"></span>
+                    </template>
                     <span class="l1-name-link slds-truncate" onclick={handleLevel1Click} data-id={l1.record.Id}
                       title={l1.record.Name}>
                       {l1.record.Name}
@@ -185,24 +195,24 @@
                 <template for:each={l1.children} for:item="l2">
                   <div key={l2.record.Id} class={l2.rowClass} onclick={handleLevel2Toggle} data-id={l2.record.Id}
                     data-parent={l1.record.Id}>
-                    <div class="name-slot">
-                      <template if:true={l2.children}>
-                        <template if:true={supportsLevel3}>
-                          <span class="row-bullet">&#9679;</span>
-                        </template>
-                      </template>
-                      <div class="name-cell">
-                        <span class="slds-truncate" onclick={handleItemClick} data-id={l2.record.Id} data-level="2"
-                          title={l2.record.Name}>
-                          {l2.record.Name}
-                        </span>
-                      </div>
-                    </div>
+              <!-- L2 row name slot -->
+<div class="name-slot">
+  <template if:true={l2.children}>
+    <template if:true={supportsLevel3}>
+      <lightning-icon icon-name="utility:right" size="xx-small" class={l2.iconClass}></lightning-icon>
+    </template>
+  </template>
+  <div class="name-cell">
+    <!-- ADD this bullet span -->
+    <span class="row-bullet"></span>
+    <span class="slds-truncate" onclick={handleItemClick} data-id={l2.record.Id} data-level="2"
+      title={l2.record.Name}>
+      {l2.record.Name}
+    </span>
+  </div>
+</div>
                     <span class="duration-text">{l2.duration}</span>
                     <div class="owner-cell">
-                      <div class="owner-avatar" style={l2.ownerAvatarStyle} title={l2.ownerName}>
-                        {l2.ownerInitials}
-                      </div>
                     </div>
                   </div>
 
@@ -217,9 +227,6 @@
                         </div>
                         <span class="duration-text">{l3.duration}</span>
                         <div class="owner-cell">
-                          <div class="owner-avatar" style={l3.ownerAvatarStyle} title={l3.ownerName}>
-                            {l3.ownerInitials}
-                          </div>
                         </div>
                       </div>
                     </template>
@@ -538,7 +545,6 @@
         </div>
       </div>
     </template>
-  </div>
   <!-- Filter Panel Backdrop -->
     <template if:true={isFilterPanelOpen}>
       <div class="filter-backdrop" onclick={closeFilterPanel}></div>
@@ -549,7 +555,6 @@
 
       <div class="filter-panel__header">
         <span class="filter-panel__title">
-          <lightning-icon icon-name="utility:filterList" size="x-small" class="filter-panel__title-icon"></lightning-icon>
           Filters
           <template if:true={hasActiveFilters}>
             <span class="filter-panel__count-chip">{filterBadgeLabel} active</span>
@@ -567,7 +572,7 @@
       <div class="filter-panel__rows">
         <template if:true={filterRowsEmpty}>
           <div class="filter-panel__empty">
-            <lightning-icon icon-name="utility:filterList" size="medium" class="filter-panel__empty-icon"></lightning-icon>
+            <lightning-icon icon-name="utility:close" size="x-small"></lightning-icon>
             <p>No filters added yet.</p>
             <p class="filter-panel__empty-sub">Click <strong>+ Add Filter</strong> to get started.</p>
           </div>
@@ -576,7 +581,7 @@
         <template for:each={filterRows} for:item="row">
   <!-- Logic connector shown between rows (not before the first row) -->
   <template if:false={row.isFirstRow}>
-    <div key={row.id} class="filter-logic-connector">
+    <div key={row.logicKey} class="filter-logic-connector">
       <select class="filter-select filter-logic-connector__select"
         data-rowid={row.id}
         onchange={handleFilterLogicChange}
@@ -598,7 +603,7 @@
             <div class="filter-row__field">
               <label class="filter-row__label">Field</label>
               <select class="filter-select" data-rowid={row.id} onchange={handleFilterFieldChange} aria-label="Select field">
-                <template for:each={availableFilterFields} for:item="fieldOpt">
+   <template for:each={availableFilterFields} for:item="fieldOpt">
                   <option key={fieldOpt.value} value={fieldOpt.value}>{fieldOpt.label}</option>
                 </template>
               </select>
@@ -666,5 +671,6 @@
           </button>
         </div>
       </div>
+    </div>
     </div>
 </template>
