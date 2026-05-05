@@ -16,43 +16,55 @@
         <targetConfig targets="lightning__AppPage,lightning__RecordPage,lightning__HomePage">
 
             <property name="hierarchyLevel" type="String" label="1. Hierarchy Depth" datasource="No Hierarchy,1 Level,2 Levels,3 Levels" default="No Hierarchy" description="No Hierarchy = L1 only. 1 Level = L1 > L2. 2 Levels = L1 > L2 > L3." />
+            <property name="allObjectsLabel" type="String" label="2. All Objects Label" description="Label shown for the All Projects / All Objects scope button." />
             <property name="chartTitle" type="String" label="3. Chart Title" description="Optional custom title shown in the chart header." />
-            
-<property name="level1Object" type="String" label="L1: Object API Name" />
-            <property name="level1DisplayField" type="String" label="Name Field API Name" />
-            <property name="level1StartDate" type="String" label="Start Date Field" />
-            <property name="level1EndDate" type="String" label="End Date Field" />
-            <property name="level1Progress" type="String" label="Status Field" />
-            <property name="level1Section1Name" type="String" label="Section 1 Name" />
-            <property name="level1Section1Fields" type="String" label="Section 1 Fields (Comma Separated)" />
-            <property name="level1Section2Name" type="String" label="Section 2 Name" />
-            <property name="level1Section2Fields" type="String" label="Section 2 Fields (Comma Separated)" />
+            <property name="statusColorMap" type="String" label="4. Status Color Map" description="Map status values to colors. Use named colors (red, orange, yellow, green, blue, navy, purple, pink, teal, grey) OR hex codes (#ff0000) OR rgb values (rgb(255,0,0)). Format: StatusValue=color. Example: New=blue,Pending=#f97316,Completed=green,N/A=grey" />
 
             <property name="level1Object" type="String" label="L1: Object API Name" />
             <property name="level1DisplayField" type="String" label="L1: Name Field API Name" />
-            <property name="level2ParentLookup" type="String" label="L1 : Lookup Field to Base Object" />
             <property name="level1StartDate" type="String" label="L1: Start Date Field" />
             <property name="level1EndDate" type="String" label="L1: End Date Field" />
+            <property name="level1PlannedStartDate" type="String" label="L1: Planned Start Date Field" />
+            <property name="level1PlannedEndDate" type="String" label="L1: Planned End Date Field" />
+            <property name="level1ActualStartDate" type="String" label="L1: Actual Start Date Field" />
+            <property name="level1ActualEndDate" type="String" label="L1: Actual End Date Field" />
+            <property name="level1TargetEndDate" type="String" label="L1: Target End Date Field" />
             <property name="level1Progress" type="String" label="L1: Status Field" />
             <property name="level1Section1Name" type="String" label="L1: Section 1 Name" />
             <property name="level1Section1Fields" type="String" label="L1: Section 1 Fields (Comma Separated)" />
             <property name="level1Section2Name" type="String" label="L1: Section 2 Name" />
             <property name="level1Section2Fields" type="String" label="L1: Section 2 Fields (Comma Separated)" />
 
-            <property name="level2Object" type="String" label="L2 : Object API Name" />
-            <property name="level2ParentLookup" type="String" label="L2 : Lookup Field to Level 1" />
-            <property name="level2StartDate" type="String" label="L2 : Start Date Field" />
-            <property name="level2EndDate" type="String" label="L2 : End Date Field" />
-            <property name="level2Progress" type="String" label="L2 : Status Field" />
+            <property name="level2Object" type="String" label="L2: Object API Name" />
+            <property name="level2ParentLookup" type="String" label="L2: Parent Lookup to L1" />
+            <property name="level2SidebarFields" type="String" label="L2: Sidebar Fields" />
+            <property name="level2StartDate" type="String" label="L2: Start Date Field" />
+            <property name="level2EndDate" type="String" label="L2: End Date Field" />
+            <property name="level2PlannedStartDate" type="String" label="L2: Planned Start Date Field" />
+            <property name="level2PlannedEndDate" type="String" label="L2: Planned End Date Field" />
+            <property name="level2ActualStartDate" type="String" label="L2: Actual Start Date Field" />
+            <property name="level2ActualEndDate" type="String" label="L2: Actual End Date Field" />
+            <property name="level2TargetEndDate" type="String" label="L2: Target End Date Field" />
+            <property name="level2Progress" type="String" label="L2: Status Field" />
             <property name="level2Section1Name" type="String" label="L2: Section 1 Name" />
             <property name="level2Section1Fields" type="String" label="L2: Section 1 Fields (Comma Separated)" />
             <property name="level2Section2Name" type="String" label="L2: Section 2 Name" />
             <property name="level2Section2Fields" type="String" label="L2: Section 2 Fields (Comma Separated)" />
 
-            
-
-            <property name="statusColorMap" type="String" label="4. Status Color Map"
-  description="Map status values to colors. Use named colors (red, orange, yellow, green, blue, navy, purple, pink, teal, grey) OR hex codes (#ff0000) OR rgb values (rgb(255,0,0)). Format: StatusValue=color. Example: New=blue,Pending=#f97316,Completed=green,N/A=grey" />
+            <property name="level3Object" type="String" label="L3: Object API Name" />
+            <property name="level3ParentLookup" type="String" label="L3: Parent Lookup to L2" />
+            <property name="level3StartDate" type="String" label="L3: Start Date Field" />
+            <property name="level3EndDate" type="String" label="L3: End Date Field" />
+            <property name="level3PlannedStartDate" type="String" label="L3: Planned Start Date Field" />
+            <property name="level3PlannedEndDate" type="String" label="L3: Planned End Date Field" />
+            <property name="level3ActualStartDate" type="String" label="L3: Actual Start Date Field" />
+            <property name="level3ActualEndDate" type="String" label="L3: Actual End Date Field" />
+            <property name="level3TargetEndDate" type="String" label="L3: Target End Date Field" />
+            <property name="level3Progress" type="String" label="L3: Status Field" />
+            <property name="level3Section1Name" type="String" label="L3: Section 1 Name" />
+            <property name="level3Section1Fields" type="String" label="L3: Section 1 Fields (Comma Separated)" />
+            <property name="level3Section2Name" type="String" label="L3: Section 2 Name" />
+            <property name="level3Section2Fields" type="String" label="L3: Section 2 Fields (Comma Separated)" />
 
         </targetConfig>
     </targetConfigs>

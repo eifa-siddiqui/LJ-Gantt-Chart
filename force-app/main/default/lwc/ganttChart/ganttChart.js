@@ -3751,7 +3751,7 @@ _getBarColorOverride(statusValue) {
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth   = 3;
     ctx.beginPath();
-    ctx.moveTo(todayX, timeHdrY);
+    ctx.moveTo(todayX, contentStartY);
     ctx.lineTo(todayX, height);
     ctx.stroke();
 
@@ -3804,6 +3804,36 @@ _getBarColorOverride(statusValue) {
     while (name.length > 3 && ctx.measureText(name).width > maxNameWidth) {
       name = name.slice(0, -4) + '…';
     }
+    // Sidebar icons: bullets and expand arrows
+    const hasChildren = (row.item.children || []).length > 0;
+    const showL1Bullet = row.type === 'l1' && this.hierarchyDepth === 0;
+    const showL2Bullet = row.type === 'l2';
+    const iconX = indent - 16;
+    const bulletX = indent - 10;
+
+    if (hasChildren) {
+      ctx.fillStyle = '#0055b3';
+      ctx.beginPath();
+      if (row.item.expanded) {
+        ctx.moveTo(iconX - 3, midY - 4);
+        ctx.lineTo(iconX + 5, midY - 4);
+        ctx.lineTo(iconX + 1, midY + 3);
+      } else {
+        ctx.moveTo(iconX - 2, midY - 4);
+        ctx.lineTo(iconX + 4, midY);
+        ctx.lineTo(iconX - 2, midY + 4);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    if (showL1Bullet || showL2Bullet) {
+      ctx.fillStyle = '#0055b3';
+      ctx.beginPath();
+      ctx.arc(bulletX, midY, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.fillText(name, indent, midY);
 
     // Duration
